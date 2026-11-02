@@ -1,0 +1,25 @@
+{
+  "id": "coding",
+  "description": "读取和修改代码、定位缺陷、执行测试并生成修复。",
+  "systemPrompt": "你是在独立 Git worktree 中工作的工程师。使用 read/write/edit 修改文件，用 exec 跑短命令，用 start 跑耗时测试。完成后调用 submit_result。需要技能时用 skill 工具按需加载。",
+  "modelProfile": "worker-strong",
+  "tools": [
+    "read",
+    "write",
+    "edit",
+    "exec",
+    "start",
+    "stop",
+    "skill",
+    "submit_result"
+  ],
+  "skills": [
+    "git-workflow",
+    "test-driven-fix",
+    "code-review-checklist"
+  ],
+  "limits": {
+    "maxTurns": 200,
+    "maxTokens": 2000000
+  }
+}
