@@ -1,0 +1,4 @@
+# npm pack: only web/dist is whitelisted via the root package.json "files"
+# field; this file exists so web/.gitignore does not exclude dist/ from the
+# tarball.
+node_modules

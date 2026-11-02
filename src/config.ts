@@ -1,7 +1,25 @@
 import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+
+export const DEFAULT_DATA_ROOT = "~/.opensuperagent";
+
+export function defaultConfigDir(): string {
+  return join(homedir(), ".opensuperagent");
+}
+
+/** Expand a leading `~` and make the path absolute relative to `base`. */
+export function resolveDataRoot(p: string, base = process.cwd()): string {
+  const expanded =
+    p === "~"
+      ? homedir()
+      : p.startsWith("~/") || p.startsWith("~\\")
+        ? join(homedir(), p.slice(2))
+        : p;
+  return resolve(base, expanded);
+}
 
 const SourceSchema = z.object({
   source: z.string(),
@@ -10,13 +28,17 @@ const SourceSchema = z.object({
 });
 
 const ConfigSchema = z.object({
-  instance: z.object({
-    data_root: z.string(),
-    max_active_tasks: z.number().int().positive().default(2),
-  }),
-  models: z.object({
-    router: z.string().default("router-profile"),
-  }),
+  instance: z
+    .object({
+      data_root: z.string().default(DEFAULT_DATA_ROOT),
+      max_active_tasks: z.number().int().positive().default(2),
+    })
+    .default({}),
+  models: z
+    .object({
+      router: z.string().default("router-profile"),
+    })
+    .default({}),
   router: z
     .object({
       instructions: z.string().default(""),
@@ -52,20 +74,30 @@ const ConfigSchema = z.object({
 
 export type AppConfig = z.infer<typeof ConfigSchema>;
 
-export function loadConfig(configPath?: string): AppConfig {
-  const path =
-    configPath ??
-    process.env.OPENSUPERAGENT_CONFIG ??
-    resolve(process.cwd(), "config.yaml");
+/**
+ * Config file discovery: explicit path/env wins, then ./config.yaml
+ * (project-local), then <defaultConfigDir>/config.yaml, else built-in defaults.
+ */
+export function discoverConfigPath(): string | undefined {
+  const local = resolve(process.cwd(), "config.yaml");
+  if (existsSync(local)) return local;
+  const global = join(defaultConfigDir(), "config.yaml");
+  if (existsSync(global)) return global;
+  return undefined;
+}
 
-  if (!existsSync(path)) {
+export function loadConfig(configPath?: string): AppConfig {
+  const explicit = configPath ?? process.env.OPENSUPERAGENT_CONFIG;
+  let path = explicit ?? discoverConfigPath();
+
+  if (explicit && !existsSync(explicit)) {
     throw new Error(
-      `Config not found: ${path}. Copy config.example.yaml to config.yaml.`,
+      `Config not found: ${explicit}. Copy config.example.yaml to config.yaml.`,
     );
   }
 
-  const raw = parseYaml(readFileSync(path, "utf8"));
-  const parsed = ConfigSchema.parse(raw);
+  const raw = path ? parseYaml(readFileSync(path, "utf8")) : undefined;
+  const parsed = ConfigSchema.parse(raw ?? {});
 
   if (process.env.OPENSUPERAGENT_ADMIN_TOKEN) {
     parsed.console.admin_token = process.env.OPENSUPERAGENT_ADMIN_TOKEN;
@@ -74,7 +106,12 @@ export function loadConfig(configPath?: string): AppConfig {
     parsed.instance.data_root = process.env.OPENSUPERAGENT_DATA_ROOT;
   }
 
-  parsed.instance.data_root = resolve(parsed.instance.data_root);
+  // Relative data_root resolves against the config file's directory so a
+  // config in ~/.opensuperagent never depends on the launch directory.
+  parsed.instance.data_root = resolveDataRoot(
+    parsed.instance.data_root,
+    path ? dirname(path) : process.cwd(),
+  );
   return parsed;
 }
 

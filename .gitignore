@@ -9,6 +9,7 @@ config.yaml
 .env
 .env.*
 *.log
+*.tgz
 coverage/
 .instance.lock
 docs/

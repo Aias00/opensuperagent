@@ -1,13 +1,16 @@
 instance:
-  data_root: ./data
+  # Default: ~/.opensuperagent — a user-level dir that does not depend on
+  # where the CLI is launched. Override with OPENSUPERAGENT_DATA_ROOT.
+  data_root: ~/.opensuperagent
   max_active_tasks: 2
 
 models:
   router: deepseek-flash
   # Worker model comes from secrets/llm.json workerModel (default deepseek-flash)
 
-# Put API key in secrets/llm.json (gitignored) or DEEPSEEK_API_KEY env.
-# Example secrets/llm.json:
+# Put API key in <data_root>/secrets/llm.json or DEEPSEEK_API_KEY env,
+# or configure providers in the web console (stored in <data_root>/secrets/).
+# Example <data_root>/secrets/llm.json:
 #   { "provider":"deepseek", "baseUrl":"https://api.deepseek.com",
 #     "apiKey":"sk-...", "routerModel":"deepseek-flash", "workerModel":"deepseek-flash" }
 

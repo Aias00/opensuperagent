@@ -65,7 +65,7 @@ export class App {
     this.settings = new SettingsStore(
       this.paths.root,
       opts?.legacyLlm === undefined
-        ? loadLlmConfig(process.cwd())
+        ? loadLlmConfig(process.cwd(), this.paths.root)
         : opts.legacyLlm,
     );
     this.adapters = new Adapters(this.settings, this.store);

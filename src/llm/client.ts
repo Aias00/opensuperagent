@@ -7,7 +7,10 @@ import type {
   LlmConfig,
 } from "./types.js";
 
-export function loadLlmConfig(cwd = process.cwd()): LlmConfig | null {
+export function loadLlmConfig(
+  cwd = process.cwd(),
+  dataRoot?: string,
+): LlmConfig | null {
   const fromEnvKey =
     process.env.DEEPSEEK_API_KEY ?? process.env.OPENSUPERAGENT_LLM_API_KEY;
   const baseUrl =
@@ -20,6 +23,7 @@ export function loadLlmConfig(cwd = process.cwd()): LlmConfig | null {
   const secretPaths = [
     resolve(cwd, "secrets/llm.json"),
     resolve(cwd, "data/secrets/llm.json"),
+    ...(dataRoot ? [resolve(dataRoot, "secrets/llm.json")] : []),
   ];
   for (const p of secretPaths) {
     if (!existsSync(p)) continue;

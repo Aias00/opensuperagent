@@ -2,7 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "./config.js";
+import { loadConfig, defaultConfigDir } from "./config.js";
 import { DataPaths } from "./paths.js";
 import { Store } from "./storage/index.js";
 import { importSeed, importDefinitionFile, importSkillDir } from "./catalog/index.js";
@@ -62,12 +62,15 @@ async function cmdInit(args: string[]): Promise<void> {
   let configPath = configPathFromArgs(args);
   if (!configPath) {
     const local = resolve(process.cwd(), "config.yaml");
-    if (!existsSync(local)) {
-      const example = join(ROOT, "config.example.yaml");
-      copyFileSync(example, local);
-      console.log(`Wrote ${local}`);
+    const global = join(defaultConfigDir(), "config.yaml");
+    // Project-local config wins; otherwise seed a user-level config so the
+    // data root and its config live together under ~/.opensuperagent.
+    configPath = existsSync(local) ? local : global;
+    if (!existsSync(configPath)) {
+      mkdirSync(dirname(configPath), { recursive: true });
+      copyFileSync(join(ROOT, "config.example.yaml"), configPath);
+      console.log(`Wrote ${configPath}`);
     }
-    configPath = local;
   }
 
   const config = loadConfig(configPath);
