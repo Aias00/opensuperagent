@@ -1,0 +1,28 @@
+/** English translations for Chinese text that arrives at runtime
+ * (worker and skill descriptions, provider presets, API payloads). */
+export const enData: Record<string, string> = {
+  "Git worktree 分支约定、提交信息与 PR 准备步骤。": "Git worktree conventions, commit messages and pull request preparation.",
+  "先复现失败测试，再最小改动修复，最后确认全绿。": "Reproduce a failing test, apply the smallest fix and verify the result.",
+  "分流与澄清：快速判断请求类型，必要时提问或建议交给 coding/research。": "Triage requests, clarify essential unknowns and recommend the right Worker.",
+  "前端开发：实现页面、交互、响应式布局和中英文界面。": "Frontend development: pages, interactions, responsive layouts and localized interfaces.",
+  "变更审查：检查代码与设计缺陷，给出有证据的审查意见。": "Change review: inspect code and design defects with evidence-backed findings.",
+  "变更审查：识别行为回退、边界缺陷和缺失的验证证据。": "Change review: behavioral regressions, boundary defects and missing verification evidence.",
+  "只读调研：阅读代码与文档、运行只读命令、汇总结论，不修改仓库。": "Research code and documentation, run read-only commands and summarize findings.",
+  "后端开发：实现服务接口、业务逻辑、数据持久化与异常恢复。": "Backend development: service APIs, business logic, persistence and recovery.",
+  "回归验证：构造复现、边界用例、并发与稳定的故障断言。": "Regression testing: reproduction, boundary cases, concurrency and stable failure assertions.",
+  "性能分析：建立基线、定位瓶颈并比较优化前后的结果。": "Performance analysis: baselines, bottlenecks and before/after measurements.",
+  "技术文档写作：面向读者说明配置、使用步骤、验证与边界。": "Technical writing: setup, workflows, verification and practical limits for the reader.",
+  "接口契约检查：输入校验、错误语义、鉴权、幂等和兼容性。": "API contracts: validation, error semantics, authentication, idempotency and compatibility.",
+  "提交结果前的自检清单：边界、错误处理、测试与可读性。": "Pre-delivery review: boundaries, error handling, tests and readability.",
+  "故障诊断：收集时间线、定位故障层并提出可验证的恢复步骤。": "Incident diagnosis: timelines, fault isolation and verifiable recovery steps.",
+  "数据分析：检查 CSV 数据质量，生成可复核的统计与报告。": "Data analysis: inspect CSV quality and produce reproducible statistics and reports.",
+  "数据质量分析：缺失、重复、字段类型与可复核的统计结果。": "Data quality: missing values, duplicates, field types and reproducible statistics.",
+  "文档编写：维护使用指南、配置说明、接口文档和变更说明。": "Documentation: user guides, setup instructions, API docs and release notes.",
+  "界面实现与无障碍检查：键盘操作、语义、响应式与状态反馈。": "Frontend implementation and accessibility: keyboard, semantics, responsive layout and feedback.",
+  "自定义 / OpenAI Compatible": "Custom / OpenAI Compatible",
+  "证据调研：区分事实与推断，保留来源和可追溯的结论。": "Evidence-based research: distinguish facts and inference with traceable sources.",
+  "读取和修改代码、定位缺陷、执行测试并生成修复。": "Read and change code, diagnose defects, run tests and implement fixes.",
+  "质量验证：编写和执行回归、边界、并发及故障恢复测试。": "Quality assurance: regression, boundary, concurrency and recovery tests.",
+  "运行诊断：分析健康状态、日志、连接故障与性能瓶颈。": "Operations diagnosis: health, logs, connection failures and performance bottlenecks.",
+  "需求澄清：明确目标、约束、验收条件及必要的缺失信息。": "Requirements clarification: goals, constraints, acceptance criteria and essential unknowns.",
+};
