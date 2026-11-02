@@ -1,0 +1,35 @@
+instance:
+  data_root: ./data
+  max_active_tasks: 2
+
+models:
+  router: deepseek-flash
+  # Worker model comes from secrets/llm.json workerModel (default deepseek-flash)
+
+# Put API key in secrets/llm.json (gitignored) or DEEPSEEK_API_KEY env.
+# Example secrets/llm.json:
+#   { "provider":"deepseek", "baseUrl":"https://api.deepseek.com",
+#     "apiKey":"sk-...", "routerModel":"deepseek-flash", "workerModel":"deepseek-flash" }
+
+router:
+  instructions: ""
+
+execution:
+  exec_timeout_sec: 120
+  default_deadline_sec: 1800
+  max_output_mb: 50
+
+supervisor:
+  max_turn_duration_sec: 1200
+  stall_after_sec: 1800
+  interval_sec: 60
+
+budget:
+  daily_cost_usd: 50
+
+console:
+  listen: 127.0.0.1:7420
+  # admin_token: set via env OPENSUPERAGENT_ADMIN_TOKEN for non-loopback access
+
+sources:
+  - source: console

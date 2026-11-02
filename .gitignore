@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+secrets/
+config.yaml
+*.sqlite
+*.sqlite-*
+.DS_Store
+.env
+.env.*
+*.log
+coverage/
+.instance.lock
+docs/
