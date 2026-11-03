@@ -8,13 +8,16 @@ import { DeliveryService } from "./delivery/index.js";
 import { ConsoleChannelIngress } from "./channels/index.js";
 import { WorkspaceManager, CommandRunner } from "./execution/index.js";
 import { SessionManager, type FacadeFactory } from "./session/index.js";
-import { createLlmFacadeFactory } from "./session/llm-agent.js";
-import { createPizzaFacadeFactory } from "./session/pizza-agent.js";
+import {
+  createPizzaFacadeFactory,
+  ensurePizzaRuntime,
+} from "./session/pizza-agent.js";
+import { buildRouterSystemPrompt } from "./router/prompts.js";
 import { RouterTools, RouterLoop } from "./router/index.js";
 import { WorkerTools, WorkerLoop } from "./worker/index.js";
 import { Supervisor } from "./supervisor/index.js";
 import { EventBus } from "./events/bus.js";
-import { loadLlmConfig, LlmClient } from "./llm/index.js";
+import { loadLlmConfig } from "./llm/index.js";
 import { SettingsStore } from "./settings/store.js";
 import { Adapters } from "./channels/adapters/index.js";
 import { FeishuConnection } from "./channels/feishu-connection.js";
@@ -41,17 +44,12 @@ export class App {
   readonly settings: SettingsStore;
   readonly adapters: Adapters;
   readonly feishuConnection: FeishuConnection;
-  private readonly customFacade: boolean;
-  usedEngine: "builtin" | "pizza" = "builtin";
-  get engineMode(): "mvp" | "builtin" | "pizza" {
-    return this.customFacade ? "mvp" : this.usedEngine;
+  private readonly hasTestFacade: boolean;
+  get engineMode(): "pizza" {
+    return "pizza";
   }
-  get agentMode(): "llm" | "mvp" | "unconfigured" {
-    return this.customFacade
-      ? "mvp"
-      : this.settings.ready
-        ? "llm"
-        : "unconfigured";
+  get agentMode(): "llm" | "unconfigured" {
+    return this.hasTestFacade || this.settings.ready ? "llm" : "unconfigured";
   }
 
   private pumpTimer: NodeJS.Timeout | null = null;
@@ -60,13 +58,13 @@ export class App {
 
   constructor(
     readonly config: AppConfig,
-    opts?: { facadeFactory?: FacadeFactory; legacyLlm?: LlmConfig | null },
+    opts?: { testFacadeFactory?: FacadeFactory; legacyLlm?: LlmConfig | null },
   ) {
     this.paths = new DataPaths(config.instance.data_root);
     this.lock = new InstanceLock(this.paths.instanceLock);
     this.store = Store.open(this.paths.stateDb);
     this.events = new EventBus(this.store.db);
-    this.customFacade = !!opts?.facadeFactory;
+    this.hasTestFacade = !!opts?.testFacadeFactory;
     this.settings = new SettingsStore(
       this.paths.root,
       opts?.legacyLlm === undefined
@@ -126,60 +124,22 @@ export class App {
       workerTools: this.workerTools,
       events: this.events,
     };
-    const llmFactory = createLlmFacadeFactory({
-      ...deps,
-      config,
-      client: (owner, profile) =>
-        new LlmClient(
-          this.settings.resolve(
-            owner === "router" ? "router" : "worker",
-            profile,
-          ),
-        ),
-    });
-    const requireConfig: FacadeFactory = async (input) => {
-      const handle = await llmFactory(input);
-      return {
-        session: input.session,
-        tagging: null,
-        prompt: async (text) => {
-          if (!this.settings.ready) throw new Error("LLM is not configured");
-          await handle.prompt(text);
-        },
-        abort: (reason) => handle.abort(reason),
-        close: () => handle.close(),
-      };
-    };
     const pizzaFactory = createPizzaFacadeFactory({
       ...deps,
       paths: this.paths,
       resolveModel: (owner, profile) => this.settings.resolve(owner, profile),
+      routerSystemPrompt: () =>
+        buildRouterSystemPrompt(
+          config,
+          this.store.catalog.listActiveDefinitions(),
+        ),
+      redact: (message) => this.settings.redact(message),
     });
-    let pizzaBroken = false;
-    const facadeFactory: FacadeFactory =
-      opts?.facadeFactory ??
-      (config.agent.engine === "builtin"
-        ? requireConfig
-        : async (input) => {
-            if (!pizzaBroken) {
-              try {
-                const handle = await pizzaFactory(input);
-                this.usedEngine = "pizza";
-                return handle;
-              } catch (err) {
-                if (config.agent.engine === "pizza") throw err;
-                pizzaBroken = true;
-                console.error(
-                  "[app] pizza engine unavailable; builtin loop active:",
-                  err,
-                );
-              }
-            }
-            this.usedEngine = "builtin";
-            return requireConfig(input);
-          });
-
-    this.sessions = new SessionManager(this.store, this.paths, facadeFactory);
+    this.sessions = new SessionManager(
+      this.store,
+      this.paths,
+      opts?.testFacadeFactory ?? pizzaFactory,
+    );
     this.routerLoop = new RouterLoop(
       this.store,
       this.sessions,
@@ -214,6 +174,7 @@ export class App {
   }
 
   async start(): Promise<void> {
+    if (!this.hasTestFacade) await ensurePizzaRuntime();
     ensureDataDirs(this.paths.root);
     this.lock.acquire();
 
@@ -226,6 +187,16 @@ export class App {
     for (const t of this.store.triggers.listPending()) {
       this.store.triggers.setStatus(t.id, "pending", "routed");
       this.store.inbox.insertOrGet({ target: "router", triggerId: t.id });
+    }
+
+    if (!this.hasTestFacade && this.settings.ready) {
+      await this.sessions.open("router", {
+        systemPrompt: buildRouterSystemPrompt(
+          this.config,
+          this.store.catalog.listActiveDefinitions(),
+        ),
+        modelProfile: this.config.models.router,
+      });
     }
 
     this.delivery.recoverInterrupted();
@@ -365,7 +336,7 @@ export class App {
         });
       }
 
-      const canRun = this.customFacade || this.settings.ready;
+      const canRun = this.hasTestFacade || this.settings.ready;
       const progress = await Promise.allSettled([
         canRun ? this.routerLoop.tick() : Promise.resolve(false),
         canRun ? this.workerLoop.tickAll() : Promise.resolve(0),

@@ -72,8 +72,14 @@ const ConfigSchema = z.object({
   sources: z.array(SourceSchema).default([{ source: "console" }]),
   agent: z
     .object({
-      // "auto" uses Pizza when installed, falling back to the builtin loop.
-      engine: z.enum(["auto", "pizza", "builtin"]).default("auto"),
+      // Normalize the old default selector for existing config files.
+      // Execution is always Pizza; other engine values are rejected.
+      engine: z
+        .preprocess(
+          (value) => (value === "auto" ? "pizza" : value),
+          z.literal("pizza"),
+        )
+        .default("pizza"),
     })
     .prefault({}),
 });

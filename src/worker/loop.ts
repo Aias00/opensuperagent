@@ -7,7 +7,7 @@ import type { InboxItem, Trigger } from "../types.js";
 
 /**
  * Worker turn loop per Task (§7.2).
- * Tool side effects are performed by the session facade (MVP / Pizza).
+ * Tool side effects are performed by the session facade (Pizza).
  */
 export class WorkerLoop {
   private readonly busy = new Set<string>();
@@ -39,7 +39,10 @@ export class WorkerLoop {
     if (!this.sessions.isIdle(taskId)) return false;
 
     const pending = this.store.inbox.listPending(taskId);
-    if (pending.length === 0) {
+    if (
+      pending.length === 0 &&
+      !this.store.runs.findActive(this.sessions.ensureSession(taskId).id)
+    ) {
       if (task.status === "active") {
         this.store.tasks.transition(taskId, "active", "waiting");
       }

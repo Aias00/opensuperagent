@@ -240,6 +240,7 @@ async function main() {
       at: new Date().toISOString(),
       transport: "local HTTP fixtures matching native platform protocols",
       llm: "real configured provider",
+      engine: app.engineMode,
       routerModel: router.routerModel,
       workerModel: worker.workerModel,
       durationMs: Date.now() - started,
@@ -252,13 +253,14 @@ async function main() {
           r.text.includes(submittedNotice(r.channel)!),
       })),
       passed:
+        app.engineMode === "pizza" &&
         evidence.length === 3 &&
         evidence.every((e) => e.verified && e.status === "completed") &&
         verifiedReplies(),
     };
-    mkdirSync(resolve("docs/verification"), { recursive: true });
+    mkdirSync(resolve("artifacts/verification"), { recursive: true });
     writeFileSync(
-      resolve("docs/verification/native-live-result.json"),
+      resolve("artifacts/verification/native-live-result.json"),
       JSON.stringify(report, null, 2) + "\n",
     );
     console.log(JSON.stringify(report, null, 2));

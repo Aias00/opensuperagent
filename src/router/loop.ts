@@ -9,7 +9,7 @@ import { buildRouterSystemPrompt, formatRouterBatch } from "./prompts.js";
 /**
  * Router turn loop (§6.1).
  * When idle + pending inbox → one Run with all pending inputs.
- * Tool side effects are performed by the session facade (MVP / Pizza).
+ * Tool side effects are performed by the session facade (Pizza).
  */
 export class RouterLoop {
   private running = false;
@@ -29,7 +29,11 @@ export class RouterLoop {
     if (!this.sessions.isIdle("router")) return false;
 
     const pending = this.store.inbox.listPending("router");
-    if (pending.length === 0) return false;
+    if (
+      pending.length === 0 &&
+      !this.store.runs.findActive(this.sessions.ensureSession("router").id)
+    )
+      return false;
 
     this.running = true;
     try {

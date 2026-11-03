@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
+import { streamReply } from "./helpers/pizza.js";
 import { App } from "../src/app.js";
 import { ApiServer } from "../src/api/server.js";
 import { loadConfig } from "../src/config.js";
@@ -15,7 +16,7 @@ import {
   jsonBody,
 } from "./helpers/harness.js";
 
-it("hot-swaps the next Worker model while a slow existing Worker keeps its model; Router and new messages remain responsive", async () => {
+it(`Pizza: hot-swaps the next Worker model while a slow existing Worker keeps its model; Router and new messages remain responsive`, async () => {
   const gate = deferred();
   const requests: any[] = [];
   let held = false;
@@ -47,8 +48,8 @@ it("hot-swaps the next Worker model while a slow existing Worker keeps its model
           },
         })),
       };
-    } else if (body.model !== "router-model" && isInitial) {
-      if (body.model === "worker-a") {
+    } else if (body.model !== "router-model") {
+      if (body.model === "worker-a" && isInitial) {
         held = true;
         await gate.promise;
       }
@@ -60,16 +61,31 @@ it("hot-swaps the next Worker model while a slow existing Worker keeps its model
             id: `worker-${requests.length}`,
             type: "function",
             function: {
-              name: "submit_result",
-              arguments: JSON.stringify({
-                outcome: "completed",
-                notice: "Verified",
-                summary: "Protocol routing verified",
-              }),
+              name: isInitial ? "skill" : "submit_result",
+              arguments: JSON.stringify(
+                isInitial
+                  ? { action: "list" }
+                  : {
+                      outcome: "completed",
+                      notice: "Verified",
+                      summary: "Protocol routing verified",
+                    },
+              ),
             },
           },
         ],
       };
+    }
+    if (body.stream) {
+      streamReply(res, {
+        text: message.content,
+        calls: message.tool_calls?.map((call: any) => ({
+          id: call.id,
+          name: call.function.name,
+          args: JSON.parse(call.function.arguments),
+        })),
+      });
+      return;
     }
     res.end(
       JSON.stringify({
@@ -86,7 +102,6 @@ it("hot-swaps the next Worker model while a slow existing Worker keeps its model
   const config = loadConfig(resolve("config.example.yaml"));
   config.instance.data_root = dir;
   config.console.listen = "127.0.0.1:0";
-  config.agent.engine = "builtin";
   const app = new App(config, { legacyLlm: null });
   importSeed(app.store, resolve("seed"));
   const api = new ApiServer(app);

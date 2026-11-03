@@ -1,6 +1,15 @@
 /** Explicit real-model verification in a temporary instance; no external messages. */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { App } from "../src/app.js";
@@ -50,22 +59,12 @@ async function main() {
     action: string;
     path?: string;
   }[] = [];
-  const execResults: { taskId: string; exitCode: number }[] = [];
   const fixture = "export const add = (a, b) => a - b;\n";
   let peakActiveWorkers = 0;
   app.events.on((event) => {
     const payload = event.payload as any;
     if (event.kind === "tool" && event.summary === "skill")
       skillCalls.push({ taskId: event.scope, ...payload.args });
-    if (
-      event.kind === "tool_result" &&
-      event.summary.startsWith("exec →") &&
-      typeof payload.result?.exitCode === "number"
-    )
-      execResults.push({
-        taskId: event.scope,
-        exitCode: payload.result.exitCode,
-      });
     if (
       event.kind === "tool_result" &&
       event.summary.startsWith("start_task →") &&
@@ -92,7 +91,7 @@ async function main() {
     {
       id: "qa",
       skill: "regression-testing",
-      text: "请使用 qa Worker。已有 calc.mjs 故意把 add 写成减法。先读 regression-testing SKILL.md，再读取 calc.mjs，编写 calc.test.mjs，使用 node:test 和 assert 断言 add(2,3)===5。实际运行 node --test calc.test.mjs，确认失败并写 regression.md 记录实际预期和实际值。不要修复或修改 calc.mjs。验证目标是成功复现已知 bug，因此用 submit_result completed，notice 包含 CATALOG_QA_OK。",
+      text: "请使用 qa Worker。已有 calc.mjs 故意把 add 写成减法。先读 regression-testing SKILL.md，再读取 calc.mjs，编写 calc.test.mjs，使用 node:test 和 assert 断言 add(2,3)===5。必须使用 exec 工具实际运行 node --test calc.test.mjs（不使用 start），确认失败并写 regression.md 记录实际预期和实际值。不要修复或修改 calc.mjs。验证目标是成功复现已知 bug，因此用 submit_result completed，notice 包含 CATALOG_QA_OK。",
     },
   ];
   const started = Date.now();
@@ -133,11 +132,13 @@ async function main() {
         }
       };
       let artifactsVerified = false;
-      if (input.id === "docs")
+      let checks: Record<string, boolean> = {};
+      if (input.id === "docs") {
+        const doc =
+          read("getting-started.md") || read("docs/getting-started.md");
         artifactsVerified =
-          /\/health/.test(read("getting-started.md")) &&
-          /curl/.test(read("getting-started.md")) &&
-          /200/.test(read("getting-started.md"));
+          /\/health/.test(doc) && /curl/.test(doc) && /200/.test(doc);
+      }
       if (input.id === "data") {
         try {
           const quality = JSON.parse(read("quality.json"));
@@ -153,15 +154,61 @@ async function main() {
               );
         } catch {}
       }
-      if (input.id === "qa")
-        artifactsVerified =
-          read("calc.mjs") === fixture &&
-          read("calc.test.mjs").includes("node:test") &&
-          read("regression.md").length > 30 &&
-          execResults.some(
-            (result) => result.taskId === task?.id && result.exitCode !== 0,
-          );
+      if (input.id === "qa") {
+        // Independently execute the generated test: shell wrappers used by the
+        // model may intentionally return 0 after recording a failed test.
+        const independent = task
+          ? spawnSync(
+              process.execPath,
+              ["--test", "--test-reporter=tap", "calc.test.mjs"],
+              { cwd: task.workspacePath, encoding: "utf8", timeout: 10000 },
+            )
+          : null;
+        checks = {
+          sourceUnchanged: read("calc.mjs") === fixture,
+          testUsesNodeTest: read("calc.test.mjs").includes("node:test"),
+          reportWritten: read("regression.md").length > 30,
+          modelExecutedTest:
+            !!task &&
+            app.events
+              .list(task.id, 2000)
+              .some(
+                (event) =>
+                  event.kind === "tool" &&
+                  event.summary === "exec" &&
+                  /node\s+--test/.test(
+                    String((event.payload as any)?.args?.cmd),
+                  ),
+              ),
+          independentlyReproducedAssertion:
+            independent?.status === 1 &&
+            /ERR_ASSERTION/.test(independent.stdout ?? "") &&
+            /# fail 1/.test(independent.stdout ?? ""),
+        };
+        artifactsVerified = Object.values(checks).every(Boolean);
+      }
       return {
+        checks,
+        artifactNames: task ? readdirSync(task.workspacePath) : [],
+        durableReceipt: (() => {
+          if (!task) return false;
+          const session = app.store.sessions.getByOwner(task.id);
+          if (!session) return false;
+          const db = new DatabaseSync(session.eventsPath, { readOnly: true });
+          try {
+            return (
+              Number(
+                db
+                  .prepare(
+                    "SELECT COUNT(*) n FROM events WHERE type='USER_MESSAGE' AND idempotency_key LIKE 'run:%'",
+                  )
+                  .get()!.n,
+              ) > 0
+            );
+          } finally {
+            db.close();
+          }
+        })(),
         worker: input.id,
         actualWorker: task?.definition.id,
         status: task?.status,
@@ -181,6 +228,7 @@ async function main() {
     const report = {
       at: new Date().toISOString(),
       llm: "real configured provider; isolated temporary instance",
+      engine: app.engineMode,
       routerModel: router.routerModel,
       workerModel: worker.workerModel,
       concurrentInputs: 3,
@@ -189,17 +237,21 @@ async function main() {
       durationMs: Date.now() - started,
       results,
       passed:
+        app.engineMode === "pizza" &&
         results.every(
           (result) =>
             result.actualWorker === result.worker &&
             result.status === "completed" &&
             result.skillRead &&
+            result.durableReceipt &&
             result.artifactsVerified &&
             result.noticeVerified,
-        ) && peakActiveWorkers === 2,
+        ) &&
+        peakActiveWorkers === 2,
     };
+    mkdirSync(resolve("artifacts/verification"), { recursive: true });
     writeFileSync(
-      "docs/verification/catalog-live-result.json",
+      "artifacts/verification/catalog-live-result.json",
       JSON.stringify(report, null, 2) + "\n",
     );
     console.log(JSON.stringify(report, null, 2));

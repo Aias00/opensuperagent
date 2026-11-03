@@ -13,3 +13,4 @@ config.yaml
 coverage/
 .instance.lock
 docs/
+artifacts/

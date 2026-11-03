@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import type { EventEmitter } from "node:events";
 import { dirname, join } from "node:path";
 import type { Store } from "../storage/index.js";
 import type { DataPaths } from "../paths.js";
@@ -10,8 +11,16 @@ import type { FacadeFactory, SessionFacadeHandle } from "./manager.js";
 import { TaggingStore, type EventAppendInput } from "./tagging-store.js";
 import { ROUTER_CHAT_TOOLS, executeRouterTool } from "../llm/tools-router.js";
 import { WORKER_CHAT_TOOLS, executeWorkerTool } from "../llm/tools-worker.js";
+import { validateToolArguments } from "../llm/tool-validation.js";
 
 type Pizza = typeof import("@tomsun28/pizza");
+let sdk: Promise<Pizza> | undefined;
+function loadPizza() {
+  return (sdk ??= import("@tomsun28/pizza"));
+}
+export async function ensurePizzaRuntime(): Promise<void> {
+  await loadPizza();
+}
 
 type EventQuery = {
   after_sequence?: number;
@@ -25,7 +34,9 @@ type EventQuery = {
 type EventStoreLike = {
   append?(e: EventAppendInput): unknown;
   appendBatch?(e: EventAppendInput[]): unknown;
-  query?(filter: EventQuery): { payload?: unknown }[];
+  query?(
+    filter: EventQuery,
+  ): { payload?: unknown; idempotency_key?: string; sequence: number }[];
   subscribe?(h: (e: { type: string }) => void, o?: unknown): () => void;
   flush?(): Promise<void>;
   close?(): void;
@@ -35,6 +46,59 @@ type EventStoreLike = {
 };
 
 const ROUTER_MAX_CALLS = 16;
+
+// Pizza 0.5.1 releases its advisory lock file but leaves its four process
+// listeners registered. Remove those exact callbacks when the facade closes.
+// Serialize setup so concurrent sessions cannot capture each other's hooks.
+let sessionSetup: Promise<unknown> = Promise.resolve();
+function createSessionWithCleanup(
+  pizza: Pizza,
+  options: Parameters<Pizza["createSessionFacade"]>[0],
+) {
+  const setup = sessionSetup.then(async () => {
+    const processHooks: EventEmitter = process;
+    const signals = ["exit", "SIGINT", "SIGTERM", "SIGHUP"] as const;
+    const before = new Map(
+      signals.map((signal) => [
+        signal,
+        new Set(processHooks.listeners(signal)),
+      ]),
+    );
+    const added = () =>
+      signals.flatMap((signal) =>
+        processHooks
+          .listeners(signal)
+          .filter(
+            (listener) =>
+              !before.get(signal)!.has(listener) &&
+              ["onSignal", "onExit"].includes(listener.name) &&
+              /release\(\)/.test(String(listener)),
+          )
+          .map((listener) => ({ signal, listener })),
+      );
+    try {
+      const created = await pizza.createSessionFacade(options);
+      const hooks = added();
+      created.facade.addDisposer(() => {
+        for (const { signal, listener } of hooks)
+          processHooks.removeListener(
+            signal,
+            listener as (...args: unknown[]) => void,
+          );
+      });
+      return created;
+    } catch (error) {
+      for (const { signal, listener } of added())
+        processHooks.removeListener(
+          signal,
+          listener as (...args: unknown[]) => void,
+        );
+      throw error;
+    }
+  });
+  sessionSetup = setup.catch(() => undefined);
+  return setup;
+}
 
 /**
  * Pizza-backed session facade (§9.2): the durable event log at
@@ -48,10 +112,9 @@ export function createPizzaFacadeFactory(deps: {
   workerTools: WorkerTools;
   events: EventBus;
   resolveModel: (owner: "router" | "worker", profile?: string) => LlmConfig;
+  routerSystemPrompt?: () => string;
+  redact?: (message: string) => string;
 }): FacadeFactory {
-  let loaded: Promise<Pizza> | undefined;
-  const loadPizza = () => (loaded ??= import("@tomsun28/pizza"));
-
   return async ({ session, cwd, systemPrompt, modelProfile }) => {
     const pizza = await loadPizza();
     const owner = session.owner;
@@ -61,40 +124,43 @@ export function createPizzaFacadeFactory(deps: {
       throw new Error(`Worker session ${owner} has no task`);
     }
 
-    const cfg = deps.resolveModel(
-      isRouter ? "router" : "worker",
-      modelProfile,
-    );
     const agentDir = join(dirname(session.eventsPath), "agent");
     mkdirSync(agentDir, { recursive: true });
-
     const auth = pizza.AuthStorage.inMemory();
     const registry = pizza.ModelRegistry.inMemory(auth);
-    registry.registerProvider(cfg.provider, {
-      baseUrl: cfg.baseUrl,
-      apiKey: cfg.apiKey,
-      api:
-        cfg.protocol === "anthropic"
-          ? "anthropic-messages"
-          : "openai-completions",
-      models: [
-        {
-          id: cfg.routerModel,
-          name: cfg.routerModel,
-          reasoning: false,
-          input: ["text"],
-          contextWindow: 128000,
-          maxTokens: cfg.maxTokens ?? 8192,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        },
-      ],
-    });
-    if (cfg.apiKey) auth.setRuntimeApiKey(cfg.provider, cfg.apiKey);
-    const model = registry.find(cfg.provider, cfg.routerModel);
-    if (!model) {
-      throw new Error(`Model ${cfg.provider}/${cfg.routerModel} unavailable`);
-    }
-
+    const resolveModel = () => {
+      const cfg = deps.resolveModel(
+        isRouter ? "router" : "worker",
+        modelProfile,
+      );
+      const modelId = isRouter ? cfg.routerModel : cfg.workerModel;
+      registry.registerProvider(cfg.provider, {
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        api:
+          cfg.protocol === "anthropic"
+            ? "anthropic-messages"
+            : "openai-completions",
+        models: [
+          {
+            id: modelId,
+            name: modelId,
+            reasoning: false,
+            input: ["text"],
+            contextWindow: 128000,
+            maxTokens: cfg.maxTokens ?? 8192,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+        ],
+      });
+      auth.setRuntimeApiKey(cfg.provider, cfg.apiKey || "unused");
+      const model = registry.find(cfg.provider, modelId);
+      if (!model)
+        throw new Error(`Model ${cfg.provider}/${modelId} unavailable`);
+      return model;
+    };
+    const model = resolveModel();
+    const redact = (message: string) => deps.redact?.(message) ?? message;
     const chatTools = isRouter
       ? ROUTER_CHAT_TOOLS
       : WORKER_CHAT_TOOLS.filter((t) =>
@@ -102,47 +168,78 @@ export function createPizzaFacadeFactory(deps: {
         );
 
     let activeRunId = "";
+    let yielded = false;
+    let toolTail: Promise<unknown> = Promise.resolve();
+    let facade: Awaited<ReturnType<Pizza["createSessionFacade"]>>["facade"];
     const customTools = chatTools.map((tool) => ({
       name: tool.function.name,
       label: tool.function.name,
       description: tool.function.description ?? "",
       parameters: pizza.Type.Unsafe(tool.function.parameters),
-      execute: async (toolCallId: string, params: unknown) => {
-        const args = (params ?? {}) as Record<string, unknown>;
-        const result = isRouter
-          ? await executeRouterTool({
-              tools: deps.routerTools,
-              store: deps.store,
-              sessionId: session.id,
-              runId: activeRunId,
-              toolCallId,
-              name: tool.function.name,
-              args,
-            })
-          : await executeWorkerTool({
-              tools: deps.workerTools,
-              taskId: owner,
-              sessionId: session.id,
-              runId: activeRunId,
-              toolCallId,
-              name: tool.function.name,
-              args,
-            });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                typeof result === "string"
-                  ? result
-                  : JSON.stringify(result),
-            },
-          ],
-        };
+      execute: (toolCallId: string, params: unknown, signal?: AbortSignal) => {
+        const runId = activeRunId;
+        // Pizza may issue a parallel batch; this workspace permits one command
+        // and ordered mutations. Different sessions still execute concurrently.
+        const execution = toolTail.then(async () => {
+          signal?.throwIfAborted();
+          if (runId !== activeRunId)
+            throw new Error("Tool belongs to an earlier Run");
+          if (
+            !activeRunId ||
+            deps.store.runs.get(activeRunId)?.status !== "submitted"
+          )
+            throw new Error("Run is no longer active");
+          const args = (params ?? {}) as Record<string, unknown>;
+          const invalid = validateToolArguments(args, tool.function.parameters);
+          if (invalid) throw new Error(`Invalid tool arguments: ${invalid}`);
+          const result = isRouter
+            ? await executeRouterTool({
+                tools: deps.routerTools,
+                store: deps.store,
+                sessionId: session.id,
+                runId: activeRunId,
+                toolCallId,
+                name: tool.function.name,
+                args,
+              })
+            : await executeWorkerTool({
+                tools: deps.workerTools,
+                taskId: owner,
+                sessionId: session.id,
+                runId: activeRunId,
+                toolCallId,
+                name: tool.function.name,
+                args,
+              });
+          if (
+            !isRouter &&
+            ((result && typeof result === "object" && "busy" in result) ||
+              deps.store.tasks.isTerminal(deps.store.tasks.get(owner)!.status))
+          ) {
+            yielded = true;
+            facade.abort();
+          }
+          if (!yielded && llmCalls >= maxCalls) {
+            overBudget = true;
+            facade.abort();
+          }
+          return {
+            details: { result },
+            content: [
+              {
+                type: "text" as const,
+                text:
+                  typeof result === "string" ? result : JSON.stringify(result),
+              },
+            ],
+          };
+        });
+        toolTail = execution.catch(() => undefined);
+        return execution;
       },
     }));
 
-    const created = await pizza.createSessionFacade({
+    const created = await createSessionWithCleanup(pizza, {
       cwd: cwd ?? deps.paths.root,
       agentDir,
       storagePath: session.eventsPath,
@@ -169,7 +266,7 @@ export function createPizzaFacadeFactory(deps: {
       approvalUi: false,
       isMainAgent: false,
     });
-    const facade = created.facade;
+    facade = created.facade;
     const eventStore = created.runtime.store as unknown as EventStoreLike;
 
     // Route appends through TaggingStore so each run's first USER_MESSAGE
@@ -190,8 +287,9 @@ export function createPizzaFacadeFactory(deps: {
       if (typeof eventStore.appendBatch === "function")
         eventStore.appendBatch = (es: EventAppendInput[]) =>
           tagging.appendBatch(es);
-    } catch {
-      /* store is sealed; events go untagged */
+    } catch (error) {
+      await facade.disposeAsync();
+      throw new Error("Pizza event store cannot be tagged", { cause: error });
     }
 
     let aborted = false;
@@ -208,7 +306,7 @@ export function createPizzaFacadeFactory(deps: {
         case "LLM_CALL_REQUESTED":
           if (++llmCalls > maxCalls) {
             overBudget = true;
-            facade.abort();
+            queueMicrotask(() => facade.abort());
           }
           break;
         case "AGENT_MESSAGE_END": {
@@ -229,6 +327,7 @@ export function createPizzaFacadeFactory(deps: {
             payload: {
               runId: activeRunId,
               toolCallId: payload.tool_call_id,
+              args: payload.arguments,
             },
           });
           break;
@@ -236,11 +335,14 @@ export function createPizzaFacadeFactory(deps: {
           deps.events.emit({
             scope: owner,
             kind: "tool_result",
-            summary: `${String(payload.tool_name ?? "tool")} → ${summarize(payload.result)}`,
+            summary: `${String(payload.tool_name ?? "tool")} → ${redact(summarize((payload.details as { result?: unknown } | undefined)?.result ?? payload.result))}`,
             payload: {
               runId: activeRunId,
               toolCallId: payload.tool_call_id,
               isError: !!payload.is_error,
+              result:
+                (payload.details as { result?: unknown } | undefined)?.result ??
+                payload.result,
             },
           });
           break;
@@ -248,7 +350,7 @@ export function createPizzaFacadeFactory(deps: {
           deps.events.emit({
             scope: owner,
             kind: "error",
-            summary: String(payload.error ?? "agent error"),
+            summary: redact(String(payload.error ?? "agent error")),
           });
           break;
       }
@@ -269,6 +371,14 @@ export function createPizzaFacadeFactory(deps: {
       async prompt(text) {
         const active = deps.store.runs.findActive(session.id);
         if (!active) return;
+        aborted = false;
+        yielded = false;
+        llmCalls = 0;
+        overBudget = false;
+        // Snapshot credentials and model once per Run, including reused sessions.
+        facade.setModel(resolveModel(), "off");
+        if (isRouter && deps.routerSystemPrompt)
+          facade.systemPrompt = deps.routerSystemPrompt();
         activeRunId = active.id;
         tagging.beginRun(active.id);
         deps.events.emit({
@@ -280,6 +390,20 @@ export function createPizzaFacadeFactory(deps: {
         const startSequence = eventStore.head_sequence ?? 0;
         try {
           await facade.prompt(text);
+          const messages = eventStore.query?.({
+            types: ["USER_MESSAGE"],
+            thread_id: session.id,
+            after_sequence: startSequence,
+          });
+          if (
+            messages?.length !== 1 ||
+            messages[0]?.idempotency_key !== `run:${active.id}` ||
+            tagging.pendingRunId
+          )
+            throw new Error(
+              "Pizza Run has no unique durable submission receipt",
+            );
+          await eventStore.flush?.();
           if (overBudget)
             throw new Error(`Model call budget exceeded (${maxCalls})`);
           const payload = (lastMessageEnd(startSequence)?.payload ?? {}) as {
@@ -287,6 +411,8 @@ export function createPizzaFacadeFactory(deps: {
             error_message?: string;
           };
           if (
+            !yielded &&
+            !aborted &&
             payload.stop_reason &&
             payload.stop_reason !== "stop" &&
             payload.stop_reason !== "aborted"
@@ -303,11 +429,13 @@ export function createPizzaFacadeFactory(deps: {
           deps.events.emit({
             scope: owner,
             kind: "error",
-            summary: String(err),
+            summary: redact(String(err)),
           });
           throw err;
         } finally {
           const run = deps.store.runs.get(active.id);
+          if (run?.status === "submitted" && aborted)
+            deps.store.runs.transition(active.id, "submitted", "aborted");
           if (run?.status === "submitted" && !aborted) {
             deps.store.runs.transition(active.id, "submitted", "completed");
           }
@@ -358,8 +486,7 @@ function contentText(content: unknown): string {
 
 function summarize(value: unknown): string {
   try {
-    const s =
-      typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+    const s = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
     return s.length > 160 ? `${s.slice(0, 160)}…` : s;
   } catch {
     return String(value);

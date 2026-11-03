@@ -115,9 +115,7 @@ export function SystemPage({
               <dd>
                 {data.agent === "llm"
                   ? tr("system.modeLlm")
-                  : data.agent === "mvp"
-                    ? tr("system.modeMvp")
-                    : tr("system.modeUnconfigured")}
+                  : tr("system.modeUnconfigured")}
               </dd>
               <dt>{tr("system.listen")}</dt>
               <dd>{info?.listen ?? tr("system.loading")}</dd>

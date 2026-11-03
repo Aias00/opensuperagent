@@ -66,7 +66,9 @@ export class ApiServer {
     await new Promise<void>((resolve, reject) => {
       this.server!.once("error", reject);
       this.server!.listen(port, host, () => {
-        console.log(`[api] listening on http://${host}:${port}`);
+        const address = this.server!.address();
+        const boundPort = address && typeof address !== "string" ? address.port : port;
+        console.log(`[api] listening on http://${host}:${boundPort}`);
         console.log(`[api] web root ${this.webRoot}`);
         resolve();
       });
@@ -553,9 +555,9 @@ export class ApiServer {
 
 function resolveWebRoot(): string {
   const candidates = [
-    resolve(process.cwd(), "web/dist"),
     resolve(__dirname, "../../web/dist"),
     resolve(__dirname, "../web/dist"),
+    resolve(process.cwd(), "web/dist"),
   ];
   for (const c of candidates) {
     if (existsSync(join(c, "index.html"))) return c;

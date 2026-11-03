@@ -4,22 +4,12 @@ Persistent collaborative agent — a Router that triages incoming work and
 Workers that execute it, with a web console, SQLite-backed state, and
 channel adapters (console, GitHub, Feishu, generic webhook).
 
-Requires Node.js >= 22.
+Requires Node.js >= 22.13.0.
 
 ## Install
 
-From the npm tarball:
-
 ```sh
-npm install -g opensuperagent-0.1.0.tgz
-```
-
-Or from a checkout of this repository:
-
-```sh
-npm install          # also builds web/ on first `npm run build`
-npm run build
-npm link             # exposes the `opensuperagent` command
+npm install -g opensuperagent
 ```
 
 ## Quick start
@@ -28,6 +18,15 @@ npm link             # exposes the `opensuperagent` command
 opensuperagent init     # creates ~/.opensuperagent + config, imports seeds
 opensuperagent serve    # starts API + web console on 127.0.0.1:7420
 ```
+
+Stop the foreground server with `Ctrl+C`. Upgrade or uninstall through npm:
+
+```sh
+npm install -g opensuperagent@latest
+npm uninstall -g opensuperagent
+```
+
+Configuration and runtime data stay in `~/.opensuperagent`.
 
 Then open http://127.0.0.1:7420 and add an LLM provider under System →
 Models (or set `DEEPSEEK_API_KEY` / drop `<data_root>/secrets/llm.json`).
@@ -71,14 +70,4 @@ opensuperagent def import <file.json> Import a worker definition
 opensuperagent def export <id>        Print definition JSON
 opensuperagent skill import <dir>     Import a skill directory (SKILL.md)
 opensuperagent skill list             List skills
-```
-
-## Development
-
-```sh
-npm run dev          # run from source (tsx)
-npm test             # unit tests
-npm run typecheck    # tsc --noEmit
-npm run build        # tsc + web build → dist/, web/dist
-npm pack             # build + produce opensuperagent-0.1.0.tgz
 ```

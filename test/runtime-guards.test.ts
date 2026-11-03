@@ -8,12 +8,14 @@ import { loadConfig } from "../src/config.js";
 import { executeWorkerTool } from "../src/llm/tools-worker.js";
 import { temporaryApp } from "./helpers/harness.js";
 
-it("retains input without generating MVP work when no production LLM is configured", async () => {
+it("loads Pizza and retains input until a production LLM is configured", async () => {
   const dir = mkdtempSync(join(tmpdir(), "osa-unconfigured-"));
   const config = loadConfig(resolve("config.example.yaml"));
   config.instance.data_root = dir;
   const app = new App(config, { legacyLlm: null });
   try {
+    await app.start();
+    assert.equal(app.engineMode, "pizza");
     app.submitConsole({ text: "This input must wait for a configured model" });
     await app.pump();
     assert.equal(app.agentMode, "unconfigured");

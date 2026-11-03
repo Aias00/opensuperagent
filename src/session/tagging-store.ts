@@ -2,8 +2,7 @@
  * Tagging store wrapper for Pizza SessionEventStore (§9.2).
  *
  * Marks the first USER_MESSAGE of a prompt with idempotency_key = `run:<runId>`.
- * Concrete Pizza types are duck-typed so the module compiles without a hard
- * dependency on @tomsun28/pizza at build time.
+ * The narrow store interface isolates the wrapper from SDK storage internals.
  */
 
 export interface EventAppendInput {

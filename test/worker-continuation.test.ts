@@ -2,9 +2,6 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { temporaryApp, eventually } from "./helpers/harness.js";
-import { runToolLoop } from "../src/llm/loop.js";
-import { WORKER_CHAT_TOOLS } from "../src/llm/tools-worker.js";
-import type { LlmClient } from "../src/llm/client.js";
 
 function task(
   h: ReturnType<typeof temporaryApp>,
@@ -126,54 +123,6 @@ it("keeps the Task objective and earlier requirements across multiple Runs and a
     assert.match(prompt, /Current UTC time: \d{4}-\d{2}-\d{2}T/);
     assert.ok(prompt.split("## New inputs")[1]!.includes("REQUIREMENT_TWO"));
     assert.ok(!prompt.split("## New inputs")[1]!.includes("REQUIREMENT_ONE"));
-  } finally {
-    await h.close();
-  }
-});
-
-it("yields a Worker turn on busy instead of repeatedly polling the active operation", async () => {
-  const h = temporaryApp();
-  let requests = 0;
-  const client = {
-    async chat() {
-      requests++;
-      if (requests > 1)
-        throw new Error("Busy operation must not be polled again");
-      return {
-        message: {
-          role: "assistant",
-          content: null,
-          tool_calls: [
-            {
-              id: "write",
-              type: "function",
-              function: {
-                name: "write",
-                arguments: JSON.stringify({
-                  path: "test.txt",
-                  content: "test",
-                }),
-              },
-            },
-          ],
-        },
-      };
-    },
-  } as unknown as LlmClient;
-  try {
-    const result = await runToolLoop({
-      client,
-      model: "test",
-      systemPrompt: "test",
-      userPrompt: "test",
-      tools: WORKER_CHAT_TOOLS,
-      execute: async () => ({ busy: "op-running" }),
-      events: h.app.events,
-      scope: "worker",
-      yieldOnBusy: true,
-    });
-    assert.equal(requests, 1);
-    assert.equal(result.steps, 1);
   } finally {
     await h.close();
   }

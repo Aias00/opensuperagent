@@ -10,7 +10,7 @@ import { App } from "../../src/app.js";
 import { ApiServer } from "../../src/api/server.js";
 import { loadConfig } from "../../src/config.js";
 import { importSeed } from "../../src/catalog/index.js";
-import { createMvpFacadeFactory } from "../../src/session/mvp-agent.js";
+import { createFixtureFacadeFactory } from "./fixture-session.js";
 import type { FacadeFactory } from "../../src/session/manager.js";
 export function deferred() {
   let resolve!: () => void;
@@ -25,18 +25,18 @@ export function temporaryApp(wrap?: (factory: FacadeFactory) => FacadeFactory) {
   config.instance.data_root = dir;
   config.console.listen = "127.0.0.1:0";
   config.supervisor.interval_sec = 100;
-  let mvp: FacadeFactory;
+  let fixture: FacadeFactory;
   const app = new App(config, {
     legacyLlm: null,
-    facadeFactory: (opts) => mvp(opts),
+    testFacadeFactory: (opts) => fixture(opts),
   });
-  const factory = createMvpFacadeFactory({
+  const factory = createFixtureFacadeFactory({
     store: app.store,
     routerTools: app.routerTools,
     workerTools: app.workerTools,
     events: app.events,
   });
-  mvp = wrap ? wrap(factory) : factory;
+  fixture = wrap ? wrap(factory) : factory;
   importSeed(app.store, resolve("seed"));
   const api = new ApiServer(app);
   return {

@@ -1,19 +1,22 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Store } from "../storage/index.js";
-import { rows, row } from "../storage/db.js";
-import type { RouterTools } from "../router/tools.js";
-import type { WorkerTools } from "../worker/tools.js";
-import type { EventBus } from "../events/bus.js";
-import type { FacadeFactory, SessionFacadeHandle } from "./manager.js";
-import { newId, nowIso } from "../ids.js";
+import type { Store } from "../../src/storage/index.js";
+import { rows, row } from "../../src/storage/db.js";
+import type { RouterTools } from "../../src/router/tools.js";
+import type { WorkerTools } from "../../src/worker/tools.js";
+import type { EventBus } from "../../src/events/bus.js";
+import type {
+  FacadeFactory,
+  SessionFacadeHandle,
+} from "../../src/session/manager.js";
+import { newId, nowIso } from "../../src/ids.js";
 
 /**
- * MVP agent runtime without Pizza LLM.
+ * fixture agent runtime without Pizza LLM.
  * Router auto-dispatches to `coding`; Worker writes artifacts, runs a probe
  * command, and submits a completed result — enough to exercise the full pipeline.
  */
-export function createMvpFacadeFactory(deps: {
+export function createFixtureFacadeFactory(deps: {
   store: Store;
   routerTools: RouterTools;
   workerTools: WorkerTools;
@@ -123,7 +126,7 @@ async function runRouterTurn(
 
     const result = deps.routerTools.startTask({
       sessionId,
-      toolCallId: `mvp:${newId("tc")}`,
+      toolCallId: `fixture:${newId("tc")}`,
       runId,
       triggerIds: [triggerId],
       definition: "coding",
@@ -196,7 +199,7 @@ async function runWorkerTurn(
     [
       `# Working notes`,
       ``,
-      `- Agent: MVP (no Pizza LLM)`,
+      `- Agent: fixture (no Pizza LLM)`,
       `- Workspace: ${workspace}`,
       `- Definition: ${task.definition.id}`,
       `- Skills: ${task.definition.skills.join(", ") || "(none)"}`,
@@ -237,12 +240,12 @@ async function runWorkerTurn(
 
   const submit = deps.workerTools.submitResult({
     sessionId,
-    toolCallId: `mvp:${newId("tc")}`,
+    toolCallId: `fixture:${newId("tc")}`,
     runId,
     taskId,
     outcome: "completed",
     notice: `已完成：${task.objective}`,
-    summary: `MVP worker wrote OBJECTIVE.md / NOTES.md and ran a workspace probe.`,
+    summary: `fixture worker wrote OBJECTIVE.md / NOTES.md and ran a workspace probe.`,
     artifacts: [`${workspace}/OBJECTIVE.md`, `${workspace}/NOTES.md`],
   });
 

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { App } from "../src/app.js";
 import type { AppConfig } from "../src/config.js";
-import { createMvpFacadeFactory } from "../src/session/mvp-agent.js";
+import { createFixtureFacadeFactory } from "./helpers/fixture-session.js";
 
 function testConfig(dataRoot: string): AppConfig {
   return {
@@ -25,18 +25,22 @@ function testConfig(dataRoot: string): AppConfig {
     budget: { daily_cost_usd: 50 },
     console: { listen: "127.0.0.1:0" },
     sources: [{ source: "console" }],
+    agent: { engine: "pizza" },
   };
 }
 
-describe("mvp flow", () => {
+describe("fixture flow", () => {
   it("console → router → worker → completed delivery", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "osa-mvp-"));
-    // Local secrets must never turn the deterministic MVP test into live LLM calls.
+    const dir = mkdtempSync(join(tmpdir(), "osa-fixture-"));
+    // Local secrets must never turn the deterministic fixture test into live LLM calls.
     const app: App = new App(testConfig(dir), {
-      facadeFactory: async (options) => createMvpFacadeFactory({
-        store: app.store, routerTools: app.routerTools,
-        workerTools: app.workerTools, events: app.events,
-      })(options),
+      testFacadeFactory: async (options) =>
+        createFixtureFacadeFactory({
+          store: app.store,
+          routerTools: app.routerTools,
+          workerTools: app.workerTools,
+          events: app.events,
+        })(options),
     });
     try {
       // seed coding definition via catalog
