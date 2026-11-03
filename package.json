@@ -19,7 +19,7 @@
   },
   "main": "./dist/index.js",
   "scripts": {
-    "prepack": "npm run build",
+    "prepack": "node scripts/prepare-package.mjs",
     "build": "npm run clean && tsc -p tsconfig.json && npm run build:web",
     "build:web": "npm --prefix web run build",
     "dev": "tsx src/cli.ts",
@@ -32,7 +32,8 @@
     "verify:catalog": "tsx scripts/verify-catalog-live.ts",
     "test:pizza": "tsx --test test/pizza-runtime.test.ts test/model-routing.test.ts",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
-    "verify:package": "node scripts/verify-npm-package.mjs"
+    "verify:package": "node scripts/verify-npm-package.mjs",
+    "prepublishOnly": "npm run typecheck && npm --prefix web run lint && npm test"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.76.0",
@@ -56,5 +57,10 @@
   "homepage": "https://github.com/thefullgc/opensuperagent#readme",
   "bugs": {
     "url": "https://github.com/thefullgc/opensuperagent/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest",
+    "registry": "https://registry.npmjs.org/"
   }
 }
