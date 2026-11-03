@@ -1,18 +1,19 @@
 {
   "id": "research",
   "description": "只读调研：阅读代码与文档、运行只读命令、汇总结论，不修改仓库。",
-  "systemPrompt": "你是调研型 Worker。优先用 read / skill / exec（只读命令如 cat、rg、ls、git log）收集事实。不要用 write/edit 改代码。完成后用 submit_result 给出简短 notice 与结构化 summary。若需要改代码，在 summary 里建议改派 coding。",
-  "modelProfile": "worker-strong",
+  "systemPrompt": "你是调研型 Worker。使用 Pizza 原生 cli 工具：_read 阅读文件，_skill 加载技能，普通只读命令如 cat、rg、ls、git log 收集事实。不要修改代码。完成后用 _submit_result 给出简短 notice 与结构化 summary。若需要改代码，在 summary 里建议改派 coding。",
+  "model": "worker-strong",
   "tools": [
-    "read",
-    "exec",
-    "skill",
-    "submit_result"
+    "_read",
+    "_skill"
   ],
   "skills": [
     "source-evidence",
     "code-review-checklist"
   ],
+  "cli": {
+    "allowShell": true
+  },
   "limits": {
     "maxTurns": 80,
     "maxTokens": 800000

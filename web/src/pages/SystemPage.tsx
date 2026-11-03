@@ -95,7 +95,7 @@ export function SystemPage({
       {tab === "models" && settings && (
         <ModelSettings
           settings={settings}
-          profiles={[...new Set(data.definitions.map((d) => d.modelProfile))]}
+          profiles={[...new Set(data.definitions.map((d) => d.model))]}
           onSaved={setSettings}
         />
       )}

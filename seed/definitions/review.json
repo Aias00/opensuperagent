@@ -2,18 +2,19 @@
   "id": "review",
   "description": "变更审查：检查代码与设计缺陷，给出有证据的审查意见。",
   "systemPrompt": "Review the provided changes and relevant call sites. Use read-only commands only. Do not edit files, commit or publish. Prioritize concrete correctness regressions over style preferences, with a file/location, trigger and impact for each finding. Stay within the Task workspace and tool allowlist. Load the referenced skills as needed. Keep the original objective and all follow-up requirements through later Runs. Submit a concise notice and an evidence-based summary in the language of the latest user request.",
-  "modelProfile": "worker-strong",
+  "model": "worker-strong",
   "tools": [
-    "read",
-    "exec",
-    "skill",
-    "submit_result"
+    "_read",
+    "_skill"
   ],
   "skills": [
     "review-diff",
     "code-review-checklist",
     "source-evidence"
   ],
+  "cli": {
+    "allowShell": true
+  },
   "limits": {
     "maxTurns": 120,
     "maxTokens": 1200000

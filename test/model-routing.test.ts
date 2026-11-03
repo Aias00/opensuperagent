@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
-import { streamReply } from "./helpers/pizza.js";
+import { streamReply, resultCommand } from "./helpers/pizza.js";
 import { App } from "../src/app.js";
 import { ApiServer } from "../src/api/server.js";
 import { loadConfig } from "../src/config.js";
@@ -61,15 +61,15 @@ it(`Pizza: hot-swaps the next Worker model while a slow existing Worker keeps it
             id: `worker-${requests.length}`,
             type: "function",
             function: {
-              name: isInitial ? "skill" : "submit_result",
+              name: "cli",
               arguments: JSON.stringify(
                 isInitial
-                  ? { action: "list" }
-                  : {
+                  ? { command: "_skill list" }
+                  : { command: resultCommand({
                       outcome: "completed",
                       notice: "Verified",
                       summary: "Protocol routing verified",
-                    },
+                    }) },
               ),
             },
           },

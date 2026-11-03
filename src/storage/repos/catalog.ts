@@ -1,12 +1,14 @@
 import type { Db } from "../db.js";
 import { row, rows } from "../db.js";
 import type { SkillFile, SkillMeta, WorkerDefinitionSpec } from "../../types.js";
+import { validateWorkerTools } from "../../worker/definition.js";
 import { nowIso } from "../../ids.js";
 
 export class CatalogRepo {
   constructor(private readonly db: Db) {}
 
   upsertDefinition(spec: WorkerDefinitionSpec, active = true): void {
+    validateWorkerTools(spec);
     this.db
       .prepare(
         `INSERT INTO worker_definitions (id, spec, active, updated_at)

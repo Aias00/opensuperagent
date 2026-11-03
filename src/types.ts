@@ -41,8 +41,11 @@ export interface WorkerDefinitionSpec {
   id: string;
   description: string;
   systemPrompt: string;
-  modelProfile: string;
+  model: string;
+  /** Allowed native CLI commands; cli and task commands are always registered. */
   tools: string[];
+  /** Policy for Pizza's native CLI; underscore commands share one tool. */
+  cli?: { allowShell: boolean };
   skills: string[];
   limits: WorkerLimits;
 }

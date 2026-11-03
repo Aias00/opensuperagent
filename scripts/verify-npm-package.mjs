@@ -110,18 +110,15 @@ try {
     const tool =
       ++calls === 1
         ? {
-            name: "write",
+            name: "cli",
             arguments: JSON.stringify({
-              path: "npm-smoke.txt",
-              content: "PIZZA_NPM_OK",
+              command: "_write npm-smoke.txt --content PIZZA_NPM_OK",
             }),
           }
         : {
-            name: "submit_result",
+            name: "cli",
             arguments: JSON.stringify({
-              outcome: "completed",
-              notice: "NPM_OK",
-              summary: "Installed Pizza executed write and submit_result",
+              command: '_submit_result --outcome completed --notice NPM_OK --summary "Installed Pizza executed native CLI commands"',
             }),
           };
     res.writeHead(200, { "Content-Type": "text/event-stream" });

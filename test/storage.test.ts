@@ -12,6 +12,68 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("storage + routing", () => {
+  it("preserves obsolete catalog definitions and Task snapshots instead of remapping their tools", () => {
+    const dir = mkdtempSync(join(tmpdir(), "osa-no-tool-remapping-"));
+    const path = join(dir, "state.sqlite");
+    let store = Store.open(path);
+    try {
+      importSeed(store, join(root, "seed"));
+      const base = store.catalog.getDefinition("coding")!;
+      const legacy = { ...base, tools: ["read", "exec", "start", "stop", "skill", "submit_result"] };
+      store.db.prepare("UPDATE worker_definitions SET spec=? WHERE id=?")
+        .run(JSON.stringify(legacy), legacy.id);
+      const task = store.tasks.insert({
+        ownerId: "owner", objective: "Preserve the original background requirements", definition: legacy,
+        originTriggerId: "fixture", workspacePath: join(dir, "ws"),
+      });
+      store.close();
+      store = Store.open(path);
+      assert.deepEqual(store.catalog.getDefinition(legacy.id), legacy);
+      assert.deepEqual(store.tasks.get(task.id)!.definition, legacy);
+      assert.throws(() => store.catalog.upsertDefinition(legacy), /obsolete or unsupported.*start.*stop/);
+      assert.deepEqual(store.catalog.getDefinition(legacy.id), legacy);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates legacy modelProfile fields in the catalog and Task snapshots without changing tools", () => {
+    const dir = mkdtempSync(join(tmpdir(), "osa-model-migration-"));
+    const path = join(dir, "state.sqlite");
+    let store = Store.open(path);
+    try {
+      importSeed(store, join(root, "seed"));
+      const definition = store.catalog.getDefinition("coding")!;
+      const { model, ...rest } = definition;
+      const legacy = { ...rest, modelProfile: model };
+      store.db.prepare("UPDATE worker_definitions SET spec=? WHERE id=?")
+        .run(JSON.stringify(legacy), definition.id);
+      const task = store.tasks.insert({
+        ownerId: "owner",
+        objective: "Preserve the existing Task",
+        definition,
+        originTriggerId: "fixture",
+        workspacePath: join(dir, "ws"),
+      });
+      store.db.prepare("UPDATE tasks SET definition=? WHERE id=?")
+        .run(JSON.stringify({ ...legacy, model: "task-specific-model" }), task.id);
+      store.db.exec("DELETE FROM schema_migrations WHERE version=4");
+      store.close();
+      store = Store.open(path);
+      assert.deepEqual(store.catalog.getDefinition(definition.id), definition);
+      assert.deepEqual(store.tasks.get(task.id)!.definition, {
+        ...definition, model: "task-specific-model",
+      });
+      store.close();
+      store = Store.open(path);
+      assert.equal(store.tasks.get(task.id)!.definition.model, "task-specific-model");
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("migrates and imports seed", () => {
     const dir = mkdtempSync(join(tmpdir(), "osa-"));
     try {

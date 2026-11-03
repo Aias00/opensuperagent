@@ -1,13 +1,11 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { loadSkillsFromDir } from "@tomsun28/pizza";
 import { temporaryApp } from "./helpers/harness.js";
-import {
-  WORKER_CHAT_TOOLS,
-  executeWorkerTool,
-} from "../src/llm/tools-worker.js";
+import { importDefinitionFile } from "../src/catalog/import.js";
 
 it("imports all specialized Workers with valid tools, useful skills and immutable per-Task snapshots", async () => {
   const h = temporaryApp();
@@ -16,9 +14,7 @@ it("imports all specialized Workers with valid tools, useful skills and immutabl
     const skills = h.app.store.catalog.listSkills();
     assert.equal(definitions.length, 10);
     assert.equal(skills.length, 13);
-    const allowed = new Set(
-      WORKER_CHAT_TOOLS.map((tool) => tool.function.name),
-    );
+    const allowed = new Set(["_read", "_write", "_edit", "_skill"]);
     for (const definition of definitions) {
       assert.ok(definition.systemPrompt.length > 50);
       assert.ok(definition.tools.every((tool) => allowed.has(tool)));
@@ -40,49 +36,12 @@ it("imports all specialized Workers with valid tools, useful skills and immutabl
         definition: definition.id,
         objective: `Simulate ${definition.id}`,
       });
-      const listed = (await executeWorkerTool({
-        tools: h.app.workerTools,
-        taskId,
-        sessionId: "test",
-        runId: "test",
-        toolCallId: "list",
-        name: "skill",
-        args: { action: "list" },
-      })) as { name: string }[];
-      assert.deepEqual(
-        listed.map((skill) => skill.name).sort(),
-        [...definition.skills].sort(),
-      );
+      const listed = loadSkillsFromDir({ dir: h.app.paths.taskSkills(taskId), source: "task" }).skills;
+      assert.deepEqual(listed.map((skill) => skill.name).sort(), [...definition.skills].sort());
       for (const name of definition.skills) {
-        const result = (await executeWorkerTool({
-          tools: h.app.workerTools,
-          taskId,
-          sessionId: "test",
-          runId: "test",
-          toolCallId: `read-${name}`,
-          name: "skill",
-          args: { action: "read", name },
-        })) as { content: string };
-        assert.ok(result.content.includes(name));
-        assert.ok(
-          existsSync(join(h.app.paths.taskSkills(taskId), name, "SKILL.md")),
-        );
-      }
-      if (!definition.tools.includes("write")) {
-        const result = (await executeWorkerTool({
-          tools: h.app.workerTools,
-          taskId,
-          sessionId: "test",
-          runId: "test",
-          toolCallId: "denied",
-          name: "write",
-          args: { path: "unauthorized.txt", content: "no" },
-        })) as { error: string };
-        assert.match(result.error, /not permitted/);
-        assert.equal(
-          existsSync(join(h.app.paths.workspace(taskId), "unauthorized.txt")),
-          false,
-        );
+        const path = join(h.app.paths.taskSkills(taskId), name, "SKILL.md");
+        assert.ok(existsSync(path));
+        assert.ok(readFileSync(path, "utf8").includes(name));
       }
       if (definition.id === "data") {
         const path = join(
@@ -128,4 +87,20 @@ it("executes the bundled data-quality script against missing, duplicate and inco
   } finally {
     await h.close();
   }
+});
+
+it("rejects deprecated imported tools with a migration message and leaves the input untouched", async () => {
+  const h = temporaryApp();
+  try {
+    const base = h.app.store.catalog.getDefinition("coding")!;
+    for (const tool of ["cli", "read", "exec", "start", "stop", "skill", "submit_result", "_submit_result", "unknown_tool"]) {
+      const spec = { ...base, tools: [tool] };
+      const path = join(h.dir, `${tool}.json`);
+      const content = JSON.stringify(spec);
+      writeFileSync(path, content);
+      assert.throws(() => importDefinitionFile(h.app.store, path), /obsolete or unsupported|registered automatically/);
+      assert.equal(readFileSync(path, "utf8"), content);
+      assert.deepEqual(h.app.store.catalog.getDefinition(base.id), base);
+    }
+  } finally { await h.close(); }
 });

@@ -33,6 +33,7 @@ export class WorkerLoop {
     const task = this.store.tasks.get(taskId);
     if (!task || this.store.tasks.isTerminal(task.status)) return false;
     if (!this.sessions.isIdle(taskId)) return false;
+    if (this.store.operations.findActiveForTask(taskId)) return false;
 
     const pending = this.store.inbox.listPending(taskId);
     if (
@@ -57,7 +58,7 @@ export class WorkerLoop {
           task.definition.systemPrompt,
           task.definition.skills,
         ),
-        modelProfile: task.definition.modelProfile,
+        model: task.definition.model,
       });
 
       const batch = this.sessions.beginRun(taskId, (items) => {
@@ -155,8 +156,8 @@ function buildWorkerPrompt(systemPrompt: string, skills: string[]): string {
   const skillLines =
     skills.length === 0
       ? ""
-      : `\n\nAvailable skills (use skill tool to load):\n${skills.map((s) => `- ${s}`).join("\n")}`;
-  return `${systemPrompt}${skillLines}`;
+      : `\n\nAvailable skills (use _skill through cli, or read the snapshot files listed by Pizza):\n${skills.map((s) => `- ${s}`).join("\n")}`;
+  return `${systemPrompt}\n\nTool interface: the only model tool is Pizza native cli. Use _read/_write/_edit for file operations, _skill list/load/read for skills, and authorized shell commands for execution. cli.timeout is in milliseconds and commands wait for completion. Submit results with _submit_result --outcome completed --notice TEXT --summary TEXT; choose failed or needs_input when appropriate. Quote text values. Run _submit_result --help for JSON/heredoc input. It is always available.${skillLines}`;
 }
 
 function formatWorkerBatch(

@@ -1,11 +1,10 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { App } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { executeWorkerTool } from "../src/llm/tools-worker.js";
 import { temporaryApp } from "./helpers/harness.js";
 
 it("loads Pizza and retains input until a production LLM is configured", async () => {
@@ -25,51 +24,6 @@ it("loads Pizza and retains input until a production LLM is configured", async (
   } finally {
     await app.stop();
     rmSync(dir, { recursive: true, force: true });
-  }
-});
-it("rejects a hallucinated tool call outside the Worker definition at execution time", async () => {
-  const h = temporaryApp();
-  try {
-    const definition = {
-      id: "readonly",
-      description: "Read only",
-      systemPrompt: "Read only",
-      modelProfile: "worker-fast",
-      tools: ["read", "submit_result"],
-      skills: [],
-      limits: { maxTurns: 10, maxTokens: 1000 },
-    };
-    h.app.store.catalog.upsertDefinition(definition);
-    const trigger = h.app.submitConsole({ text: "Read-only request" }).trigger;
-    const task = h.app.routerTools.startTask({
-      sessionId: "router",
-      runId: "test",
-      toolCallId: "start-readonly",
-      triggerIds: [trigger.id],
-      definition: "readonly",
-      objective: "Read-only request",
-    });
-    const result = (await executeWorkerTool({
-      tools: h.app.workerTools,
-      taskId: task.taskId,
-      sessionId: "test",
-      runId: "test",
-      toolCallId: "unauthorized-write",
-      name: "write",
-      args: { path: "must-not-exist.txt", content: "unauthorized" },
-    })) as { error?: string };
-    assert.match(result.error ?? "", /not permitted/);
-    assert.equal(
-      existsSync(
-        join(
-          h.app.store.tasks.get(task.taskId)!.workspacePath,
-          "must-not-exist.txt",
-        ),
-      ),
-      false,
-    );
-  } finally {
-    await h.close();
   }
 });
 

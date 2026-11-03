@@ -312,7 +312,7 @@ export function FlowCanvas({
     definitions.forEach((d, i) =>
       edge(`delivery-${i}`, `worker-${d.id}`, "delivery", {
         sourceHandle: "feedback",
-        label: i === 0 ? "submit_result" : undefined,
+        label: i === 0 ? "_submit_result" : undefined,
         style: { stroke: "#94a8a0" },
       }),
     );
@@ -389,7 +389,7 @@ export function FlowCanvas({
         </div>
         <div className="mobile-flow-arrow">
           <ArrowDownIcon size={17} />
-          submit_result
+          _submit_result
         </div>
         <button
           className="mobile-delivery"

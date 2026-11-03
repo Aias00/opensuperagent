@@ -1,7 +1,7 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { pizzaHarness } from "./helpers/pizza.js";
+import { pizzaHarness, submitResultCall } from "./helpers/pizza.js";
 
 it("uses the actual Pizza SDK with persistent run receipts and complete tool telemetry", async () => {
   let calls = 0;
@@ -10,8 +10,8 @@ it("uses the actual Pizza SDK with persistent run receipts and complete tool tel
       ? {
           calls: [
             {
-              name: "skill",
-              args: { action: "read", name: "test-driven-fix" },
+              name: "cli",
+              args: { command: "_skill load --name test-driven-fix" },
             },
           ],
         }
@@ -23,10 +23,11 @@ it("uses the actual Pizza SDK with persistent run receipts and complete tool tel
     assert.equal(h.app.engineMode, "pizza");
     const tool = h.app.events
       .list(id)
-      .find((e) => e.kind === "tool" && e.summary === "skill");
-    assert.equal((tool?.payload as any)?.args?.name, "test-driven-fix");
+      .find((e) => e.kind === "tool" && e.summary === "cli");
+    assert.equal((tool?.payload as any)?.args?.command, "_skill load --name test-driven-fix");
     const result = h.app.events.list(id).find((e) => e.kind === "tool_result");
-    assert.ok((result?.payload as any)?.result?.content);
+    assert.equal((result?.payload as any)?.details?.builtin?.name, "skill");
+    assert.match(JSON.stringify((result?.payload as any)?.result), /test-driven-fix/);
     const session = h.app.store.sessions.getByOwner(id)!;
     const db = new DatabaseSync(session.eventsPath, { readOnly: true });
     try {
@@ -121,29 +122,25 @@ it("recovers an actual SIGKILL between a file side effect and Pizza's tool recei
       return {
         calls: [
           {
-            name: "write",
+            name: "cli",
             id: "crash-write",
-            args: { path: "once.txt", content: "EXACTLY_ONCE" },
+            args: { command: "printf EXACTLY_ONCE > once.txt; kill -KILL $PPID" },
           },
         ],
       };
     if (count === 2)
       return {
         calls: [
-          { name: "read", id: "read-recovered", args: { path: "once.txt" } },
+          { name: "cli", id: "read-recovered", args: { command: "_read once.txt --anchors none" } },
         ],
       };
     return {
       calls: [
-        {
-          name: "submit_result",
-          id: "finish-recovered",
-          args: {
+        submitResultCall({
             outcome: "completed",
             notice: "Recovered",
             summary: "Read the existing file; no repeated write",
-          },
-        },
+          }, "finish-recovered"),
       ],
     };
   });
@@ -199,7 +196,7 @@ it("recovers an actual SIGKILL between a file side effect and Pizza's tool recei
       assert.equal(
         db
           .prepare(
-            "SELECT COUNT(*) n FROM events WHERE type='TOOL_EXECUTION_START' AND json_extract(payload_json,'$.tool_name')='write'",
+            "SELECT COUNT(*) n FROM events WHERE type='TOOL_EXECUTION_START' AND json_extract(payload_json,'$.tool_call_id')='crash-write'",
           )
           .get()!.n,
         1,
@@ -212,12 +209,12 @@ it("recovers an actual SIGKILL between a file side effect and Pizza's tool recei
   }
 });
 
-it("yields a busy Pizza Worker without polling or mutating files", async () => {
+it("keeps pre-existing server operations in scheduling rather than delegating them to native tools", async () => {
   const h = await pizzaHarness(() => ({
     calls: [
       {
-        name: "write",
-        args: { path: "should-not-exist.txt", content: "busy" },
+        name: "cli",
+        args: { command: "_write should-not-exist.txt --content busy" },
       },
     ],
   }));
@@ -230,12 +227,9 @@ it("yields a busy Pizza Worker without polling or mutating files", async () => {
       cwd: task.workspacePath,
       cmd: "sleep 30",
     }).id;
-    await h.app.workerLoop.tick(id);
-    assert.equal(
-      h.requests.length,
-      1,
-      "busy tool should end this Run immediately",
-    );
+    assert.equal(await h.app.workerLoop.tick(id), false);
+    assert.equal(h.requests.length, 0, "an existing server operation blocks scheduling before any model call");
+    assert.ok(h.app.store.inbox.listPending(id).length);
     assert.equal(h.app.store.runs.listIncomplete().length, 0);
     const { existsSync } = await import("node:fs");
     assert.equal(
@@ -255,18 +249,18 @@ it("yields a busy Pizza Worker without polling or mutating files", async () => {
   }
 });
 
-it("rejects invalid tool arguments before writes and has no implicit CLI tools", async () => {
+it("rejects invalid native CLI arguments before writes and only exposes native CLI", async () => {
   let calls = 0;
   const h = await pizzaHarness(() =>
     ++calls === 1
-      ? { calls: [{ name: "write", args: { path: "bad.txt" } }] }
+      ? { calls: [{ name: "cli", args: { command: "_write bad.txt --content forbidden", timeout: "invalid" } }] }
       : { text: "Invalid arguments handled" },
   );
   try {
     const id = h.task("docs");
     await h.app.workerLoop.tick(id);
     const names = h.requests[0].tools.map((t: any) => t.function.name);
-    assert.ok(!names.includes("cli") && !names.includes("exec"));
+    assert.deepEqual(names, ["cli"]);
     const { existsSync } = await import("node:fs");
     assert.equal(existsSync(h.app.paths.workspace(id) + "/bad.txt"), false);
     assert.equal(h.app.store.runs.listIncomplete().length, 0);
@@ -312,7 +306,7 @@ it("resets the per-Run call budget after an exhausted Pizza turn", async () => {
   let count = 0;
   const h = await pizzaHarness(() =>
     ++count === 1
-      ? { calls: [{ name: "skill", args: { action: "list" } }] }
+      ? { calls: [{ name: "cli", args: { command: "_skill list" } }] }
       : { text: "New Run within budget" },
   );
   try {
@@ -380,28 +374,24 @@ it("serializes parallel tools within a Task while keeping every real command res
       ? {
           calls: [
             {
-              name: "exec",
+              name: "cli",
               id: "parallel-one",
-              args: { cmd: "sleep 0.1; printf FIRST" },
+              args: { command: "sleep 0.1; printf FIRST" },
             },
             {
-              name: "exec",
+              name: "cli",
               id: "parallel-two",
-              args: { cmd: "printf SECOND" },
+              args: { command: "printf SECOND" },
             },
           ],
         }
       : {
           calls: [
-            {
-              name: "submit_result",
-              id: "parallel-finish",
-              args: {
+            submitResultCall({
                 outcome: "completed",
                 notice: "Both done",
                 summary: "Two ordered commands verified",
-              },
-            },
+              }, "parallel-finish"),
           ],
         },
   );
@@ -412,16 +402,13 @@ it("serializes parallel tools within a Task while keeping every real command res
       .list(id)
       .filter(
         (event) =>
-          event.kind === "tool_result" && event.summary.startsWith("exec →"),
+          event.kind === "tool_result" && event.summary.startsWith("cli →") &&
+          (event.payload as any).details?.builtin?.name !== "_submit_result",
       )
       .map((event) => (event.payload as any).result);
     assert.equal(commands.length, 2);
-    assert.ok(
-      commands.every((result) => result.exitCode === 0 && !result.busy),
-    );
-    assert.deepEqual(commands.map((result) => result.logTail).sort(), [
-      "FIRST",
-      "SECOND",
+    assert.deepEqual(commands.map((result) => result.map((block: any) => block.text).join("\n")).sort(), [
+      "FIRST", "SECOND",
     ]);
     assert.equal(h.app.store.tasks.get(id)!.status, "completed");
   } finally {
@@ -476,7 +463,7 @@ it("uses Pizza's native Anthropic streaming protocol and application tools", asy
         content_block: {
           type: "tool_use",
           id: "anthropic-write",
-          name: "write",
+          name: "cli",
           input: {},
         },
       });
@@ -485,8 +472,7 @@ it("uses Pizza's native Anthropic streaming protocol and application tools", asy
         delta: {
           type: "input_json_delta",
           partial_json: JSON.stringify({
-            path: "anthropic.txt",
-            content: "ANTHROPIC_OK",
+            command: "_write anthropic.txt --content ANTHROPIC_OK",
           }),
         },
       });

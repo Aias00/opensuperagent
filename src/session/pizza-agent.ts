@@ -1,17 +1,19 @@
 import { mkdirSync } from "node:fs";
+import type { ToolDefinition } from "@tomsun28/pizza";
 import type { EventEmitter } from "node:events";
 import { dirname, join } from "node:path";
 import type { Store } from "../storage/index.js";
 import type { DataPaths } from "../paths.js";
 import type { RouterTools } from "../router/tools.js";
-import type { WorkerTools } from "../worker/tools.js";
+import type { WorkerControls } from "../worker/controls.js";
 import type { EventBus } from "../events/bus.js";
 import type { LlmConfig } from "../llm/types.js";
 import type { FacadeFactory, SessionFacadeHandle } from "./manager.js";
 import { TaggingStore, type EventAppendInput } from "./tagging-store.js";
 import { ROUTER_CHAT_TOOLS, executeRouterTool } from "../llm/tools-router.js";
-import { WORKER_CHAT_TOOLS, executeWorkerTool } from "../llm/tools-worker.js";
+import { submitResultCommand } from "../worker/commands.js";
 import { validateToolArguments } from "../llm/tool-validation.js";
+import { nativeWorkerTools } from "./native-worker-tools.js";
 
 type Pizza = typeof import("@tomsun28/pizza");
 let sdk: Promise<Pizza> | undefined;
@@ -106,13 +108,13 @@ export function createPizzaFacadeFactory(deps: {
   store: Store;
   paths: DataPaths;
   routerTools: RouterTools;
-  workerTools: WorkerTools;
+  workerControls: WorkerControls;
   events: EventBus;
   resolveModel: (owner: "router" | "worker", profile?: string) => LlmConfig;
   routerSystemPrompt?: () => string;
   redact?: (message: string) => string;
 }): FacadeFactory {
-  return async ({ session, cwd, systemPrompt, modelProfile }) => {
+  return async ({ session, cwd, systemPrompt, model: modelName }) => {
     const pizza = await loadPizza();
     const owner = session.owner;
     const isRouter = owner === "router";
@@ -128,7 +130,7 @@ export function createPizzaFacadeFactory(deps: {
     const resolveModel = () => {
       const cfg = deps.resolveModel(
         isRouter ? "router" : "worker",
-        modelProfile,
+        modelName,
       );
       const modelId = isRouter ? cfg.routerModel : cfg.workerModel;
       registry.registerProvider(cfg.provider, {
@@ -158,61 +160,65 @@ export function createPizzaFacadeFactory(deps: {
     };
     const model = resolveModel();
     const redact = (message: string) => deps.redact?.(message) ?? message;
-    const chatTools = isRouter
-      ? ROUTER_CHAT_TOOLS
-      : WORKER_CHAT_TOOLS.filter((t) =>
-          task!.definition.tools.includes(t.function.name),
-        );
+    const chatTools = isRouter ? ROUTER_CHAT_TOOLS : [];
 
     let activeRunId = "";
     let yielded = false;
     let toolTail: Promise<unknown> = Promise.resolve();
     let facade: Awaited<ReturnType<Pizza["createSessionFacade"]>>["facade"];
-    const customTools = chatTools.map((tool) => ({
+    const controlTools: ToolDefinition[] = chatTools.map((tool) => ({
       name: tool.function.name,
       label: tool.function.name,
       description: tool.function.description ?? "",
       parameters: pizza.Type.Unsafe(tool.function.parameters),
-      execute: (toolCallId: string, params: unknown, signal?: AbortSignal) => {
+      async execute(toolCallId, params) {
+        const args = (params ?? {}) as Record<string, unknown>;
+        const result = await executeRouterTool({
+          tools: deps.routerTools,
+          store: deps.store,
+          sessionId: session.id,
+          runId: activeRunId,
+          toolCallId,
+          name: tool.function.name,
+          args,
+        });
+        return {
+          details: { result },
+          content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result) }],
+        };
+      },
+    }));
+    const nativeTools = isRouter ? [] : nativeWorkerTools(
+      pizza, task!.definition, cwd ?? task!.workspacePath, deps.paths.taskSkills(owner),
+      [submitResultCommand({
+        controls: deps.workerControls,
+        taskId: owner,
+        sessionId: session.id,
+        runId: () => activeRunId,
+        sourceInfo: pizza.createSyntheticSourceInfo("<opensuperagent:task>", { source: "sdk" }),
+      })],
+    );
+    const customTools: ToolDefinition[] = [...nativeTools, ...controlTools].map((tool) => ({
+      ...tool,
+      execute: (...args) => {
         const runId = activeRunId;
-        // Pizza may issue a parallel batch; this workspace permits one command
-        // and ordered mutations. Different sessions still execute concurrently.
+        // Serialize tool batches within a Run; implementation and result format
+        // for CLI/file/skill operations belong entirely to Pizza.
         const execution = toolTail.then(async () => {
-          signal?.throwIfAborted();
-          if (runId !== activeRunId)
-            throw new Error("Tool belongs to an earlier Run");
-          if (
-            !activeRunId ||
-            deps.store.runs.get(activeRunId)?.status !== "submitted"
-          )
+          args[2]?.throwIfAborted();
+          if (runId !== activeRunId) throw new Error("Tool belongs to an earlier Run");
+          if (!runId || deps.store.runs.get(runId)?.status !== "submitted")
             throw new Error("Run is no longer active");
-          const args = (params ?? {}) as Record<string, unknown>;
-          const invalid = validateToolArguments(args, tool.function.parameters);
+          if (!isRouter && deps.store.tasks.isTerminal(deps.store.tasks.get(owner)!.status))
+            throw new Error("Task is closed");
+          const invalid = validateToolArguments(args[1], tool.parameters);
           if (invalid) throw new Error(`Invalid tool arguments: ${invalid}`);
-          const result = isRouter
-            ? await executeRouterTool({
-                tools: deps.routerTools,
-                store: deps.store,
-                sessionId: session.id,
-                runId: activeRunId,
-                toolCallId,
-                name: tool.function.name,
-                args,
-              })
-            : await executeWorkerTool({
-                tools: deps.workerTools,
-                taskId: owner,
-                sessionId: session.id,
-                runId: activeRunId,
-                toolCallId,
-                name: tool.function.name,
-                args,
-              });
-          if (
-            !isRouter &&
-            ((result && typeof result === "object" && "busy" in result) ||
-              deps.store.tasks.isTerminal(deps.store.tasks.get(owner)!.status))
-          ) {
+          const result = await tool.execute(...args);
+          const builtin = (result.details as {
+            builtin?: { name?: string; details?: { result?: { ok?: boolean } } };
+          } | undefined)?.builtin;
+          const submitted = builtin?.name === "_submit_result" && builtin.details?.result?.ok;
+          if (!isRouter && (submitted || deps.store.tasks.isTerminal(deps.store.tasks.get(owner)!.status))) {
             yielded = true;
             facade.abort();
           }
@@ -220,16 +226,7 @@ export function createPizzaFacadeFactory(deps: {
             overBudget = true;
             facade.abort();
           }
-          return {
-            details: { result },
-            content: [
-              {
-                type: "text" as const,
-                text:
-                  typeof result === "string" ? result : JSON.stringify(result),
-              },
-            ],
-          };
+          return result;
         });
         toolTail = execution.catch(() => undefined);
         return execution;
@@ -250,6 +247,9 @@ export function createPizzaFacadeFactory(deps: {
         noExtensions: true,
         noBuiltinExtensions: true,
         noSkills: true,
+        skillsOverride: () => isRouter
+          ? { skills: [], diagnostics: [] }
+          : pizza.loadSkillsFromDir({ dir: deps.paths.taskSkills(owner), source: "task" }),
         noBuiltinSkills: true,
         noPromptTemplates: true,
         noThemes: true,
@@ -257,7 +257,7 @@ export function createPizzaFacadeFactory(deps: {
       },
       model,
       thinkingLevel: "off",
-      tools: chatTools.map((t) => t.function.name),
+      tools: customTools.map((tool) => tool.name),
       customTools,
       safeModeDefault: false,
       approvalUi: false,
@@ -326,14 +326,13 @@ export function createPizzaFacadeFactory(deps: {
           deps.events.emit({
             scope: owner,
             kind: "tool_result",
-            summary: `${String(payload.tool_name ?? "tool")} → ${redact(summarize((payload.details as { result?: unknown } | undefined)?.result ?? payload.result))}`,
+            summary: `${String(payload.tool_name ?? "tool")} → ${redact(summarize(toolResult(payload)))}`,
             payload: {
               runId: activeRunId,
               toolCallId: payload.tool_call_id,
               isError: !!payload.is_error,
-              result:
-                (payload.details as { result?: unknown } | undefined)?.result ??
-                payload.result,
+              details: payload.details,
+              result: toolResult(payload),
             },
           });
           break;
@@ -376,7 +375,7 @@ export function createPizzaFacadeFactory(deps: {
           scope: owner,
           kind: "prompt",
           summary: text.slice(0, 200),
-          payload: { runId: active.id, modelProfile },
+          payload: { runId: active.id, model: modelName },
         });
         const startSequence = eventStore.head_sequence ?? 0;
         try {
@@ -503,4 +502,12 @@ function thisRunStatus(status?: string): string {
     : status === "aborted"
       ? "aborted"
       : "run_failed";
+}
+
+function toolResult(payload: Record<string, unknown>): unknown {
+  const details = payload.details as {
+    result?: unknown;
+    builtin?: { details?: { result?: unknown } };
+  } | undefined;
+  return details?.result ?? details?.builtin?.details?.result ?? payload.result;
 }

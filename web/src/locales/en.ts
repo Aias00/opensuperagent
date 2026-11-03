@@ -88,7 +88,7 @@ export const en: Record<string, string> = {
   "common.firstGoal": "Start your first goal",
   "common.inProgress": "In progress",
   "common.messageChannel": "Messaging channel",
-  "common.modelProfile": "Model profile",
+  "common.model": "Model",
   "common.newGoal": "New goal",
   "common.noRecord": "No record yet",
   "common.notConfigured": "Not configured",

@@ -33,7 +33,7 @@ export function temporaryApp(wrap?: (factory: FacadeFactory) => FacadeFactory) {
   const factory = createFixtureFacadeFactory({
     store: app.store,
     routerTools: app.routerTools,
-    workerTools: app.workerTools,
+    workerControls: app.workerControls,
     events: app.events,
   });
   fixture = wrap ? wrap(factory) : factory;

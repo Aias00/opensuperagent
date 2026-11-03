@@ -14,7 +14,7 @@ import {
 } from "./session/pizza-agent.js";
 import { buildRouterSystemPrompt } from "./router/prompts.js";
 import { RouterTools, RouterLoop } from "./router/index.js";
-import { WorkerTools, WorkerLoop } from "./worker/index.js";
+import { WorkerControls, WorkerLoop } from "./worker/index.js";
 import { Supervisor } from "./supervisor/index.js";
 import { EventBus } from "./events/bus.js";
 import { loadLlmConfig } from "./llm/index.js";
@@ -38,7 +38,7 @@ export class App {
   readonly sessions: SessionManager;
   readonly routerTools: RouterTools;
   readonly routerLoop: RouterLoop;
-  readonly workerTools: WorkerTools;
+  readonly workerControls: WorkerControls;
   readonly workerLoop: WorkerLoop;
   readonly supervisor: Supervisor;
   readonly settings: SettingsStore;
@@ -111,17 +111,15 @@ export class App {
         });
       },
     );
-    this.workerTools = new WorkerTools(
+    this.workerControls = new WorkerControls(
       this.store,
-      this.paths,
-      this.runner,
       this.delivery,
     );
 
     const deps = {
       store: this.store,
       routerTools: this.routerTools,
-      workerTools: this.workerTools,
+      workerControls: this.workerControls,
       events: this.events,
     };
     const pizzaFactory = createPizzaFacadeFactory({
@@ -192,7 +190,7 @@ export class App {
           this.config,
           this.store.catalog.listActiveDefinitions(),
         ),
-        modelProfile: this.config.models.router,
+        model: this.config.models.router,
       });
     }
 

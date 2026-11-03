@@ -68,7 +68,7 @@ async function main() {
   config.instance.data_root = dir;
   config.console.listen = "127.0.0.1:0";
   config.router.instructions =
-    "This is an isolated transport verification. For each incoming file creation request, create a coding Task. Do not reply directly. Each Worker must write and read the requested file, then submit_result with the verified file content. Keep each channel in its own Task.";
+    "This is an isolated transport verification. For each incoming file creation request, create a coding Task. Do not reply directly. Each Worker must write and read the requested file, then _submit_result with the verified file content. Keep each channel in its own Task.";
   const app = new App(config, { legacyLlm: null });
   importSeed(app.store, resolve("seed"));
   const api = new ApiServer(app);
@@ -122,7 +122,7 @@ async function main() {
   });
   try {
     const goal = (channel: string) =>
-      `在当前 Task 工作空间创建 verify-${channel}.txt，内容精确为 OSA_${channel.toUpperCase()}_VERIFIED。调用 read 确认内容，再用 submit_result(outcome=completed) 报告文件名和实际内容。不要运行 shell，也不要修改其他文件。`;
+      `在当前 Task 工作空间创建 verify-${channel}.txt，内容精确为 OSA_${channel.toUpperCase()}_VERIFIED。调用 read 确认内容，再用 cli 的 _submit_result --outcome completed 报告文件名和实际内容。不要运行 shell，也不要修改其他文件。`;
     const github = JSON.stringify({
       action: "created",
       repository: { full_name: "sandbox/opensuperagent" },

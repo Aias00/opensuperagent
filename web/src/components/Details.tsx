@@ -126,19 +126,24 @@ export function DetailPanel({
   const task = flow?.task;
   const terminal =
     task && ["completed", "failed", "cancelled"].includes(task.status);
-  const loadedSkills =
-    flow?.journal.filter(
-      (e) =>
-        e.kind === "tool" &&
-        e.summary === "skill" &&
-        (
-          e.payload as {
-            args?: {
-              action?: string;
-            };
-          }
-        )?.args?.action !== "list",
-    ) ?? [];
+  const loadedSkills = flow?.journal.flatMap((event) => {
+    const payload = event.payload as {
+      isError?: boolean;
+      args?: { action?: string; name?: string; path?: string };
+      details?: { builtin?: { name?: string; args?: { action?: string; name?: string; file?: string } } };
+    };
+    const builtin = payload.details?.builtin;
+    if (event.kind === "tool_result" && builtin?.name === "skill" && !payload.isError &&
+        ["load", "read"].includes(builtin.args?.action ?? "")) {
+      return [{ event, name: builtin.args?.name, path: builtin.args?.file }];
+    }
+    // Keep historical journal entries visible after upgrading the tool surface.
+    if (event.kind === "tool" && event.summary === "skill" && payload.args?.action !== "list") {
+      return [{ event, name: payload.args?.name, path: payload.args?.path }];
+    }
+    return [];
+  }) ?? [];
+
   return (
     <Dialog
       open={!!selection}
@@ -305,25 +310,12 @@ export function DetailPanel({
                       </div>
                       <div>
                         <h3>{tr("details.skillLoads")}</h3>
-                        {loadedSkills.map((e) => {
-                          const args = (
-                            e.payload as {
-                              args?: {
-                                name?: string;
-                                path?: string;
-                              };
-                            }
-                          ).args;
-                          return (
-                            <p key={e.id}>
-                              <code>
-                                {args?.name ?? "skill"} /{" "}
-                                {args?.path ?? "SKILL.md"}
-                              </code>{" "}
-                              <small>{time(e.createdAt)}</small>
-                            </p>
-                          );
-                        })}
+                        {loadedSkills.map(({ event, name, path }) => (
+                          <p key={event.id}>
+                            <code>{name ?? "skill"} / {path ?? "SKILL.md"}</code>{" "}
+                            <small>{time(event.createdAt)}</small>
+                          </p>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -467,8 +459,8 @@ export function DetailPanel({
               </div>
               <div className="definition-spec">
                 <div>
-                  <span>{tr("common.modelProfile")}</span>
-                  <b>{worker.modelProfile}</b>
+                  <span>{tr("common.model")}</span>
+                  <b>{worker.model}</b>
                 </div>
                 <div>
                   <span>{tr("details.turnLimit")}</span>

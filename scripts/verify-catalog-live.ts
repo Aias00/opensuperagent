@@ -63,8 +63,8 @@ async function main() {
   let peakActiveWorkers = 0;
   app.events.on((event) => {
     const payload = event.payload as any;
-    if (event.kind === "tool" && event.summary === "skill")
-      skillCalls.push({ taskId: event.scope, ...payload.args });
+    if (event.kind === "tool_result" && payload.details?.builtin?.name === "skill")
+      skillCalls.push({ taskId: event.scope, ...payload.details.builtin.args });
     if (
       event.kind === "tool_result" &&
       event.summary.startsWith("start_task →") &&
@@ -81,17 +81,17 @@ async function main() {
     {
       id: "docs",
       skill: "technical-writing",
-      text: "请使用 docs Worker。先读取 technical-writing SKILL.md，再写 getting-started.md，说明 GET /health 返回 HTTP 200 和 JSON {ok:true}，包含一个 curl 示例和验证预期。用 read 复核文件后 submit_result completed，notice 包含 CATALOG_DOCS_OK。不运行 shell。",
+      text: "请使用 docs Worker。先用 cli 的 _skill load --name technical-writing 读取 SKILL.md，再写 getting-started.md，说明 GET /health 返回 HTTP 200 和 JSON {ok:true}，包含一个 curl 示例和验证预期。用 cli 的 _read 复核文件后，再调用 _submit_result --outcome completed，notice 包含 CATALOG_DOCS_OK。不运行 shell。",
     },
     {
       id: "data",
       skill: "data-quality",
-      text: "请使用 data Worker。读取 data-quality 的 SKILL.md 和 scripts/profile_csv.py。创建 sample.csv，内容为 id,score\\na,10\\nb,\\na,10\\n（这里的\\n表示真正换行）。将技能中的原始脚本写为 profile_csv.py 并执行 python3 profile_csv.py sample.csv > quality.json。读取 JSON，确认 rows=3、duplicate_rows=1、blank_by_column.score=1；保持 sample.csv 原样。submit_result completed，notice 包含 CATALOG_DATA_OK。",
+      text: "请使用 data Worker。使用 cli 的 _skill load --name data-quality 读取 SKILL.md，再用 _skill read --name data-quality --file scripts/profile_csv.py 读取脚本。创建 sample.csv，内容为 id,score\\na,10\\nb,\\na,10\\n（这里的\\n表示真正换行）。将技能中的原始脚本写为 profile_csv.py 并执行 python3 profile_csv.py sample.csv > quality.json。读取 JSON，确认 rows=3、duplicate_rows=1、blank_by_column.score=1；保持 sample.csv 原样。_submit_result --outcome completed，notice 包含 CATALOG_DATA_OK。",
     },
     {
       id: "qa",
       skill: "regression-testing",
-      text: "请使用 qa Worker。已有 calc.mjs 故意把 add 写成减法。先读 regression-testing SKILL.md，再读取 calc.mjs，编写 calc.test.mjs，使用 node:test 和 assert 断言 add(2,3)===5。必须使用 exec 工具实际运行 node --test calc.test.mjs（不使用 start），确认失败并写 regression.md 记录实际预期和实际值。不要修复或修改 calc.mjs。验证目标是成功复现已知 bug，因此用 submit_result completed，notice 包含 CATALOG_QA_OK。",
+      text: "请使用 qa Worker。已有 calc.mjs 故意把 add 写成减法。先用 cli 的 _skill load --name regression-testing 读取 SKILL.md，再读取 calc.mjs，编写 calc.test.mjs，使用 node:test 和 assert 断言 add(2,3)===5。必须使用 Pizza 原生 cli 工具实际运行 node --test calc.test.mjs，确认失败并写 regression.md 记录实际预期和实际值。不要修复或修改 calc.mjs。验证目标是成功复现已知 bug，因此用 _submit_result --outcome completed，notice 包含 CATALOG_QA_OK。",
     },
   ];
   const started = Date.now();
@@ -175,9 +175,9 @@ async function main() {
               .some(
                 (event) =>
                   event.kind === "tool" &&
-                  event.summary === "exec" &&
+                  event.summary === "cli" &&
                   /node\s+--test/.test(
-                    String((event.payload as any)?.args?.cmd),
+                    String((event.payload as any)?.args?.command),
                   ),
               ),
           independentlyReproducedAssertion:
@@ -215,7 +215,7 @@ async function main() {
         skillRead: skillCalls.some(
           (call) =>
             call.taskId === task?.id &&
-            call.action === "read" &&
+            ["load", "read"].includes(call.action) &&
             call.name === input.skill,
         ),
         artifactsVerified,

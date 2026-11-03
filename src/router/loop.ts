@@ -37,7 +37,7 @@ export class RouterLoop {
       const systemPrompt = buildRouterSystemPrompt(this.config, defs);
       const handle = await this.sessions.open("router", {
         systemPrompt,
-        modelProfile: this.config.models.router,
+        model: this.config.models.router,
       });
 
       const batch = this.sessions.beginRun("router", (items) => {

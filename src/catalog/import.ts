@@ -10,6 +10,7 @@ import {
 import { join, relative, dirname } from "node:path";
 import type { Store } from "../storage/index.js";
 import type { WorkerDefinitionSpec } from "../types.js";
+import { validateWorkerTools } from "../worker/definition.js";
 
 /** Parse YAML-ish frontmatter from SKILL.md (name + description only). */
 export function parseSkillFrontmatter(content: string): {
@@ -56,12 +57,11 @@ export function importDefinitionFile(
   store: Store,
   filePath: string,
 ): WorkerDefinitionSpec {
-  const spec = JSON.parse(
-    readFileSync(filePath, "utf8"),
-  ) as WorkerDefinitionSpec;
+  const spec = JSON.parse(readFileSync(filePath, "utf8")) as WorkerDefinitionSpec;
   if (!spec.id || !spec.systemPrompt || !Array.isArray(spec.tools)) {
     throw new Error(`Invalid worker definition: ${filePath}`);
   }
+  validateWorkerTools(spec);
   store.catalog.upsertDefinition(spec, true);
   return spec;
 }

@@ -1,3 +1,4 @@
+import { validateWorkerTools } from "../worker/definition.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Store } from "../storage/index.js";
@@ -80,6 +81,8 @@ export class RouterTools {
         `Unknown or inactive worker definition: ${input.definition}`,
       );
     }
+
+    validateWorkerTools(def);
 
     const primaryTriggerId = input.triggerIds[0];
     if (!primaryTriggerId) {

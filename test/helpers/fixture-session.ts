@@ -3,12 +3,13 @@ import { join } from "node:path";
 import type { Store } from "../../src/storage/index.js";
 import { rows, row } from "../../src/storage/db.js";
 import type { RouterTools } from "../../src/router/tools.js";
-import type { WorkerTools } from "../../src/worker/tools.js";
+import type { WorkerControls } from "../../src/worker/controls.js";
 import type { EventBus } from "../../src/events/bus.js";
 import type {
   FacadeFactory,
   SessionFacadeHandle,
 } from "../../src/session/manager.js";
+import { createWriteTool, createBashTool, loadSkillsFromDir } from "@tomsun28/pizza";
 import { newId, nowIso } from "../../src/ids.js";
 
 /**
@@ -19,7 +20,7 @@ import { newId, nowIso } from "../../src/ids.js";
 export function createFixtureFacadeFactory(deps: {
   store: Store;
   routerTools: RouterTools;
-  workerTools: WorkerTools;
+  workerControls: WorkerControls;
   events: EventBus;
 }): FacadeFactory {
   return async ({ session, cwd }) => {
@@ -145,7 +146,7 @@ async function runRouterTurn(
 async function runWorkerTurn(
   deps: {
     store: Store;
-    workerTools: WorkerTools;
+    workerControls: WorkerControls;
     events: EventBus;
   },
   taskId: string,
@@ -181,10 +182,8 @@ async function runWorkerTurn(
     "",
   ].join("\n");
 
-  const writeObj = deps.workerTools.write(
-    taskId,
-    "OBJECTIVE.md",
-    objectiveBlock,
+  const writeObj = await createWriteTool(workspace).execute(
+    "fixture-write", { path: "OBJECTIVE.md", content: objectiveBlock }, undefined,
   );
   deps.events.emit({
     scope: taskId,
@@ -217,10 +216,8 @@ async function runWorkerTurn(
     payload: { tool: "write", path: "NOTES.md" },
   });
 
-  const execResult = await deps.workerTools.exec(
-    taskId,
-    "pwd && date && ls -la",
-    30,
+  const execResult = await createBashTool(workspace).execute(
+    "fixture-cli", { command: "pwd && date && ls -la", timeout: 30000 }, undefined,
   );
   deps.events.emit({
     scope: taskId,
@@ -230,7 +227,9 @@ async function runWorkerTurn(
   });
 
   // Skill snapshot check
-  const skills = deps.workerTools.skillList(taskId);
+  const skills = loadSkillsFromDir({
+    dir: join(workspace, "..", "..", "tasks", taskId, "skills"), source: "task",
+  }).skills;
   deps.events.emit({
     scope: taskId,
     kind: "tool",
@@ -238,7 +237,7 @@ async function runWorkerTurn(
     payload: { tool: "skill", skills },
   });
 
-  const submit = deps.workerTools.submitResult({
+  const submit = deps.workerControls.submitResult({
     sessionId,
     toolCallId: `fixture:${newId("tc")}`,
     runId,
@@ -253,8 +252,8 @@ async function runWorkerTurn(
     scope: taskId,
     kind: "tool",
     summary: submit.ok
-      ? `submit_result completed`
-      : `submit_result rejected: ${"reason" in submit ? submit.reason : ""}`,
+      ? `_submit_result completed`
+      : `_submit_result rejected: ${"reason" in submit ? submit.reason : ""}`,
     payload: { tool: "submit_result", result: submit },
   });
 }

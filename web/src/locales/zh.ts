@@ -88,7 +88,7 @@ export const zh: Record<string, string> = {
   "common.firstGoal": "发起第一个目标",
   "common.inProgress": "进行中",
   "common.messageChannel": "消息通道",
-  "common.modelProfile": "模型档案",
+  "common.model": "模型",
   "common.newGoal": "发起新目标",
   "common.noRecord": "暂无记录",
   "common.notConfigured": "未配置",

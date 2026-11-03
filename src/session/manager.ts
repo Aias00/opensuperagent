@@ -21,7 +21,7 @@ export type FacadeFactory = (input: {
   session: SessionRow;
   cwd?: string;
   systemPrompt?: string;
-  modelProfile?: string;
+  model?: string;
 }) => Promise<SessionFacadeHandle>;
 
 export class SessionManager {
@@ -41,7 +41,7 @@ export class SessionManager {
 
   async open(
     owner: string,
-    opts?: { cwd?: string; systemPrompt?: string; modelProfile?: string },
+    opts?: { cwd?: string; systemPrompt?: string; model?: string },
   ): Promise<SessionFacadeHandle> {
     const existing = this.facades.get(owner);
     if (existing) return existing;
@@ -51,7 +51,7 @@ export class SessionManager {
       session,
       cwd: opts?.cwd,
       systemPrompt: opts?.systemPrompt,
-      modelProfile: opts?.modelProfile,
+      model: opts?.model,
     });
     this.facades.set(owner, handle);
     return handle;

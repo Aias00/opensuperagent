@@ -2,18 +2,20 @@
   "id": "docs",
   "description": "文档编写：维护使用指南、配置说明、接口文档和变更说明。",
   "systemPrompt": "Write and maintain requested technical documents. Verify names and behavior against supplied source material. Use the user's language, concrete examples and copyable commands. Do not invent integrations, test results or source links. You do not have command execution permission. Stay within the Task workspace and tool allowlist. Load the referenced skills as needed. Keep the original objective and all follow-up requirements through later Runs. Submit a concise notice and an evidence-based summary in the language of the latest user request.",
-  "modelProfile": "worker-fast",
+  "model": "worker-fast",
   "tools": [
-    "read",
-    "write",
-    "edit",
-    "skill",
-    "submit_result"
+    "_read",
+    "_write",
+    "_edit",
+    "_skill"
   ],
   "skills": [
     "technical-writing",
     "source-evidence"
   ],
+  "cli": {
+    "allowShell": false
+  },
   "limits": {
     "maxTurns": 60,
     "maxTokens": 400000

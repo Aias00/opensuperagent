@@ -10,8 +10,9 @@ export interface WorkerDefinition {
   id: string;
   description: string;
   systemPrompt: string;
-  modelProfile: string;
+  model: string;
   tools: string[];
+  cli?: { allowShell: boolean };
   skills: string[];
   limits: {
     maxTurns: number;

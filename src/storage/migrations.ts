@@ -163,4 +163,24 @@ CREATE INDEX IF NOT EXISTS journal_scope_created
       PRIMARY KEY (channel, thread_id)
     );`,
   },
+  {
+    version: 4,
+    name: "004_worker_model",
+    sql: `
+UPDATE worker_definitions
+SET spec = json_remove(
+  json_set(spec, '$.model', coalesce(json_extract(spec, '$.model'), json_extract(spec, '$.modelProfile'))),
+  '$.modelProfile'
+)
+WHERE json_type(spec, '$.modelProfile') IS NOT NULL;
+
+UPDATE tasks
+SET definition = json_remove(
+  json_set(definition, '$.model', coalesce(json_extract(definition, '$.model'), json_extract(definition, '$.modelProfile'))),
+  '$.modelProfile'
+)
+WHERE json_type(definition, '$.modelProfile') IS NOT NULL;
+`,
+  },
+
 ];

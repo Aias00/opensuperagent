@@ -2,22 +2,21 @@
   "id": "frontend",
   "description": "前端开发：实现页面、交互、响应式布局和中英文界面。",
   "systemPrompt": "Implement the requested interface using the existing design system. Inspect existing screens and components first. Cover keyboard use, responsive behavior and translated copy. Verify real user flows when browser tools are available. Avoid unrelated redesigns. Stay within the Task workspace and tool allowlist. Load the referenced skills as needed. Keep the original objective and all follow-up requirements through later Runs. Submit a concise notice and an evidence-based summary in the language of the latest user request.",
-  "modelProfile": "worker-strong",
+  "model": "worker-strong",
   "tools": [
-    "read",
-    "write",
-    "edit",
-    "exec",
-    "start",
-    "stop",
-    "skill",
-    "submit_result"
+    "_read",
+    "_write",
+    "_edit",
+    "_skill"
   ],
   "skills": [
     "frontend-accessibility",
     "regression-testing",
     "code-review-checklist"
   ],
+  "cli": {
+    "allowShell": true
+  },
   "limits": {
     "maxTurns": 120,
     "maxTokens": 1200000

@@ -578,7 +578,7 @@ export default function App() {
                           <p>{tr(d.description)}</p>
                           <div className="worker-model">
                             <CpuIcon size={15} />
-                            <span>{d.modelProfile}</span>
+                            <span>{d.model}</span>
                           </div>
                           <div className="worker-capabilities">
                             <span>

@@ -12,6 +12,13 @@ export type Reply = {
   finishReason?: string;
   calls?: { name: string; args: unknown; id?: string }[];
 };
+/** Keep arbitrary result text literal through Pizza's native CLI parser. */
+export function resultCommand(value: unknown): string {
+  return `_submit_result --json <<'TASK_RESULT'\n${JSON.stringify(value)}\nTASK_RESULT`;
+}
+export function submitResultCall(args: unknown, id?: string) {
+  return { name: "cli", args: { command: resultCommand(args) }, ...(id ? { id } : {}) };
+}
 export function streamReply(res: ServerResponse, reply: Reply) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",

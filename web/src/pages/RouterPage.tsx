@@ -80,7 +80,7 @@ export function RouterPage({
               {data.router.active ? tr("router.deciding") : tr("common.waitingRequest")}
             </p>
             <dl>
-              <dt>{tr("common.modelProfile")}</dt>
+              <dt>{tr("common.model")}</dt>
               <dd>{data.router.model}</dd>
               <dt>{tr("router.availableWorkers")}</dt>
               <dd>{data.definitions.length}</dd>

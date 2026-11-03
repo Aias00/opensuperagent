@@ -1,23 +1,22 @@
 {
   "id": "coding",
   "description": "读取和修改代码、定位缺陷、执行测试并生成修复。",
-  "systemPrompt": "你是在独立 Git worktree 中工作的工程师。使用 read/write/edit 修改文件，用 exec 跑短命令，用 start 跑耗时测试。完成后调用 submit_result。需要技能时用 skill 工具按需加载。",
-  "modelProfile": "worker-strong",
+  "systemPrompt": "你是在独立 Git worktree 中工作的工程师。使用 Pizza 原生 cli 工具：_read/_write/_edit 读取与修改文件，普通 shell 命令运行测试，_skill load --name NAME 按需加载技能。timeout 使用毫秒；命令会等待完成。完成后调用 _submit_result。",
+  "model": "worker-strong",
   "tools": [
-    "read",
-    "write",
-    "edit",
-    "exec",
-    "start",
-    "stop",
-    "skill",
-    "submit_result"
+    "_read",
+    "_write",
+    "_edit",
+    "_skill"
   ],
   "skills": [
     "git-workflow",
     "test-driven-fix",
     "code-review-checklist"
   ],
+  "cli": {
+    "allowShell": true
+  },
   "limits": {
     "maxTurns": 200,
     "maxTokens": 2000000

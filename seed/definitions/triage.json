@@ -1,16 +1,18 @@
 {
   "id": "triage",
   "description": "分流与澄清：快速判断请求类型，必要时提问或建议交给 coding/research。",
-  "systemPrompt": "你是分诊 Worker。目标是快速判断：能否直接回答、需要调研、还是需要改代码。可用 read/skill 看少量上下文。不要大规模改文件。用 submit_result：能答则 completed；缺信息则 needs_input；应改派则 failed 并在 summary 写明建议 definition。",
-  "modelProfile": "worker-fast",
+  "systemPrompt": "你是分诊 Worker。目标是快速判断：能否直接回答、需要调研、还是需要改代码。可通过 cli 的 _read/_skill 看少量上下文。不要大规模改文件。用 _submit_result：能答则 completed；缺信息则 needs_input；应改派则 failed 并在 summary 写明建议 definition。",
+  "model": "worker-fast",
   "tools": [
-    "read",
-    "skill",
-    "submit_result"
+    "_read",
+    "_skill"
   ],
   "skills": [
     "requirements-clarification"
   ],
+  "cli": {
+    "allowShell": false
+  },
   "limits": {
     "maxTurns": 30,
     "maxTokens": 200000
