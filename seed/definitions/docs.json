@@ -15,9 +15,5 @@
   ],
   "cli": {
     "allowShell": false
-  },
-  "limits": {
-    "maxTurns": 60,
-    "maxTokens": 400000
   }
 }

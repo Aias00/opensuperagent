@@ -462,14 +462,6 @@ export function DetailPanel({
                   <span>{tr("common.model")}</span>
                   <b>{worker.model}</b>
                 </div>
-                <div>
-                  <span>{tr("details.turnLimit")}</span>
-                  <b>{worker.limits.maxTurns}</b>
-                </div>
-                <div>
-                  <span>{tr("details.tokenLimit")}</span>
-                  <b>{worker.limits.maxTokens.toLocaleString()}</b>
-                </div>
               </div>
               <h3 className="detail-section-heading">{tr("details.toolPerms")}</h3>
               <div className="tag-list">

@@ -32,11 +32,6 @@ export type SubmitOutcome = "completed" | "failed" | "needs_input";
 
 export type SourceKind = "console" | "feishu" | "github" | "webhook" | "system";
 
-export interface WorkerLimits {
-  maxTurns: number;
-  maxTokens: number;
-}
-
 export interface WorkerDefinitionSpec {
   id: string;
   description: string;
@@ -47,7 +42,6 @@ export interface WorkerDefinitionSpec {
   /** Policy for Pizza's native CLI; underscore commands share one tool. */
   cli?: { allowShell: boolean };
   skills: string[];
-  limits: WorkerLimits;
 }
 
 export interface Trigger {

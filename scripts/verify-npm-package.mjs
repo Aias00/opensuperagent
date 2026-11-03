@@ -16,8 +16,11 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createServer } from "node:http";
 
+const project = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
 const tarball = resolve(
-  process.argv[2] ?? "artifacts/opensuperagent-0.1.1.tgz",
+  process.argv[2] ?? `artifacts/opensuperagent-${project.version}.tgz`,
 );
 const root = mkdtempSync(join(tmpdir(), "osa-npm-package-"));
 const prefix = join(root, "prefix");
@@ -52,6 +55,14 @@ try {
   const manifest = JSON.parse(
     readFileSync(join(installed, "package.json"), "utf8"),
   );
+  assert.equal(manifest.license, "Apache-2.0");
+  assert.match(
+    readFileSync(join(installed, "LICENSE"), "utf8"),
+    /Version 2.0, January 2004/,
+  );
+  assert.match(readFileSync(join(installed, "README.md"), "utf8"), /开源落地实现/);
+  assert.ok(existsSync(join(installed, "README.en.md")));
+  assert.ok(existsSync(join(installed, "resource/flow.png")));
   assert.equal(manifest.dependencies["@tomsun28/pizza"], "0.5.1");
   assert.ok(!manifest.optionalDependencies?.["@tomsun28/pizza"]);
   for (const file of [
@@ -64,13 +75,16 @@ try {
       `stale production module: ${file}`,
     );
   const { ensurePizzaRuntime } = await import(
-    pathToFileURL(join(installed, "dist/session/pizza-agent.js")).href,
+    pathToFileURL(join(installed, "dist/session/pizza-agent.js")).href
   );
   await ensurePizzaRuntime();
   const configPath = join(root, "config.json");
   writeFileSync(
     configPath,
-    JSON.stringify({ instance: { data_root: join(root, "data") }, console: { listen: "127.0.0.1:0" } }),
+    JSON.stringify({
+      instance: { data_root: join(root, "data") },
+      console: { listen: "127.0.0.1:0" },
+    }),
   );
   const init = spawnSync(bin, ["init", "--config", configPath], {
     cwd: root,
@@ -186,7 +200,11 @@ try {
   const report = {
     at: new Date().toISOString(),
     version: manifest.version,
-    tarballSha256: createHash("sha256").update(readFileSync(tarball)).digest("hex"),
+    tarballSha256: createHash("sha256")
+      .update(readFileSync(tarball))
+      .digest("hex"),
+    license: manifest.license,
+    chineseReadmeIncluded: true,
     omitOptional: true,
     sdkInstalled: true,
     cliInit: true,

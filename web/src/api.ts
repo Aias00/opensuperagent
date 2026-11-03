@@ -14,10 +14,6 @@ export interface WorkerDefinition {
   tools: string[];
   cli?: { allowShell: boolean };
   skills: string[];
-  limits: {
-    maxTurns: number;
-    maxTokens: number;
-  };
 }
 export interface Task {
   id: string;

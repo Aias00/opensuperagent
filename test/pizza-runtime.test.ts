@@ -303,21 +303,27 @@ it("aborts an in-flight SDK model request and accepts a later Run on that sessio
 });
 
 it("resets the per-Run call budget after an exhausted Pizza turn", async () => {
-  let count = 0;
+  let round = 0;
+  let exhausted = false;
   const h = await pizzaHarness(() =>
-    ++count === 1
-      ? { calls: [{ name: "cli", args: { command: "_skill list" } }] }
-      : { text: "New Run within budget" },
+    exhausted
+      ? { text: "New Run within budget" }
+      : {
+          calls: [
+            // Distinct args per round so Pizza's identical-call loop guard
+            // stays out of the way and the Run reaches our call budget.
+            { name: "cli", args: { command: `_read missing-${++round}.txt` } },
+          ],
+        },
   );
   try {
-    const spec = h.app.store.catalog.getDefinition("coding")!;
-    spec.limits.maxTurns = 1;
-    h.app.store.catalog.upsertDefinition(spec);
     const id = h.task();
     await assert.rejects(h.app.workerLoop.tick(id), /budget exceeded/);
+    const sent = h.requests.length;
+    exhausted = true;
     h.app.submitConsole({ taskId: id, text: "New independent turn" });
     await h.app.workerLoop.tick(id);
-    assert.equal(count, 2);
+    assert.ok(h.requests.length > sent);
     assert.equal(h.app.store.runs.listIncomplete().length, 0);
   } finally {
     await h.close();

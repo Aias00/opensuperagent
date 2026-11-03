@@ -45,6 +45,7 @@ type EventStoreLike = {
 };
 
 const ROUTER_MAX_CALLS = 16;
+const WORKER_MAX_CALLS = 40;
 
 // Pizza 0.5.1 releases its advisory lock file but leaves its four process
 // listeners registered. Remove those exact callbacks when the facade closes.
@@ -286,9 +287,7 @@ export function createPizzaFacadeFactory(deps: {
     let aborted = false;
     let llmCalls = 0;
     let overBudget = false;
-    const maxCalls = isRouter
-      ? ROUTER_MAX_CALLS
-      : Math.min(task!.definition.limits.maxTurns, 40);
+    const maxCalls = isRouter ? ROUTER_MAX_CALLS : WORKER_MAX_CALLS;
 
     facade.subscribe((event) => {
       const payload =
