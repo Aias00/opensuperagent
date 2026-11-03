@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   mkdirSync,
   writeFileSync,
@@ -7,6 +7,7 @@ import {
   existsSync,
   openSync,
   closeSync,
+  appendFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import type { Store } from "../storage/index.js";
@@ -26,7 +27,7 @@ export interface CommandResult {
  * Writes Operation first, then starts the process; result.json finalizes status.
  */
 export class CommandRunner {
-  private readonly children = new Map<string, ChildProcessWithoutNullStreams>();
+  private readonly children = new Map<string, ChildProcess>();
 
   constructor(
     private readonly store: Store,
@@ -203,9 +204,10 @@ export class CommandRunner {
         .run(child.pid, nowIso(), op.id);
     }
 
-    this.children.set(op.id, child as ChildProcessWithoutNullStreams);
+    this.children.set(op.id, child);
+    child.once("error", (error) => appendFileSync(logPath, `${error}\n`));
 
-    child.on("exit", (code, signal) => {
+    child.once("close", (code, signal) => {
       this.children.delete(op.id);
       atomicWriteResult(resultPath, {
         exitCode: code,
@@ -232,7 +234,8 @@ export class CommandRunner {
         env: scrubEnv(),
       });
       closeSync(logFd);
-      this.children.set(op.id, child as ChildProcessWithoutNullStreams);
+      this.children.set(op.id, child);
+      child.once("error", (error) => appendFileSync(logPath, `${error}\n`));
 
       let timedOut = false;
       const timer = setTimeout(() => {
@@ -244,7 +247,7 @@ export class CommandRunner {
         }
       }, timeoutSec * 1000);
 
-      child.on("exit", (code, signal) => {
+      child.once("close", (code, signal) => {
         clearTimeout(timer);
         this.children.delete(op.id);
         const result: CommandResult = {

@@ -76,30 +76,13 @@ export class SessionManager {
     formatPrompt: (items: InboxItem[]) => string,
   ): { run: Run; items: InboxItem[]; promptText: string } | null {
     if (!this.isIdle(owner)) return null;
-    const items = this.store.inbox.listPending(owner);
-    if (
-      items.length === 0 &&
-      !this.store.runs.findActive(this.ensureSession(owner).id)
-    )
-      return null;
-
     const session = this.ensureSession(owner);
     return this.store.transaction(() => {
       // Re-check single-writer inside tx
       const existing = this.store.runs.findActive(session.id);
       if (existing?.status === "submitted") return null;
       if (existing?.status === "pending") {
-        const accepted = this.store.db
-          .prepare(
-            "SELECT trigger_id FROM inbox WHERE run_id = ? AND status = 'accepted' ORDER BY created_at, rowid",
-          )
-          .all(existing.id)
-          .map((row) => this.store.triggers.get(String(row.trigger_id)))
-          .filter(Boolean);
-        const items = accepted.map(
-          (trigger) =>
-            this.store.inbox.findByTargetTrigger(owner, trigger!.id)!,
-        );
+        const items = this.store.inbox.listAccepted(existing.id);
         if (!items.length) return null;
         return { run: existing, items, promptText: formatPrompt(items) };
       }
@@ -122,12 +105,9 @@ export class SessionManager {
       const session = this.store.sessions.get(run.sessionId)!;
       const receipt = readPizzaReceipt(session, run.id);
       this.store.transaction(() => {
-        const accepted = this.store.db
-          .prepare(
-            "SELECT id FROM inbox WHERE run_id = ? AND status = 'accepted'",
-          )
-          .all(run.id)
-          .map((row) => String(row.id));
+        const accepted = this.store.inbox
+          .listAccepted(run.id)
+          .map((item) => item.id);
         const task =
           session.owner === "router"
             ? null
@@ -235,9 +215,7 @@ function readPizzaReceipt(
       failed:
         ["error", "loop_detected"].includes(reason) ||
         ["error", "length"].includes(stop),
-      aborted:
-        !!completion &&
-        JSON.parse(String(completion.payload_json)).reason === "aborted",
+      aborted: reason === "aborted",
     };
   } finally {
     db.close();

@@ -1,2 +1,2 @@
 export { loadLlmConfig, LlmClient } from "./client.js";
-export type { LlmConfig, ChatMessage, ChatTool } from "./types.js";
+export type { LlmConfig, ChatTool } from "./types.js";

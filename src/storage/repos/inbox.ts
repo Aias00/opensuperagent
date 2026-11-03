@@ -97,6 +97,16 @@ export class InboxRepo {
     ).map(mapInbox);
   }
 
+  listAccepted(runId: string): InboxItem[] {
+    return rows<InboxRow>(
+      this.db
+        .prepare(
+          "SELECT * FROM inbox WHERE run_id = ? AND status = 'accepted' ORDER BY created_at, rowid",
+        )
+        .all(runId),
+    ).map(mapInbox);
+  }
+
   bindToRun(ids: string[], runId: string): void {
     const stmt = this.db.prepare(
       "UPDATE inbox SET run_id = ?, status = 'accepted' WHERE id = ? AND status = 'pending'",

@@ -2,7 +2,6 @@ import { triggerText } from "../ingress/text.js";
 import type { DataPaths } from "../paths.js";
 import type { Store } from "../storage/index.js";
 import type { SessionManager } from "../session/manager.js";
-import type { WorkerTools } from "./tools.js";
 import type { InboxItem, Trigger } from "../types.js";
 
 /**
@@ -15,12 +14,9 @@ export class WorkerLoop {
   constructor(
     private readonly store: Store,
     private readonly sessions: SessionManager,
-    private readonly tools: WorkerTools,
     private readonly maxConcurrent = 2,
     private readonly paths?: DataPaths,
-  ) {
-    void this.tools;
-  }
+  ) {}
 
   async tickAll(): Promise<number> {
     const outcomes = await Promise.allSettled(

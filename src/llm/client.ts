@@ -1,11 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type {
-  ChatCompletionResult,
-  ChatMessage,
-  ChatTool,
-  LlmConfig,
-} from "./types.js";
+import type { LlmConfig } from "./types.js";
 
 export function loadLlmConfig(
   cwd = process.cwd(),
@@ -54,170 +49,76 @@ export function loadLlmConfig(
   };
 }
 
+/** Model discovery and connectivity probes only; Pizza owns agent execution. */
 export class LlmClient {
-  constructor(private readonly config: LlmConfig) {}
-  get routerModel(): string {
-    return this.config.routerModel;
-  }
-  get workerModel(): string {
-    return this.config.workerModel;
-  }
-  private get headers(): Record<string, string> {
-    return this.config.protocol === "anthropic"
-      ? {
-          "x-api-key": this.config.apiKey,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        }
-      : {
-          ...(this.config.apiKey
-            ? { Authorization: `Bearer ${this.config.apiKey}` }
-            : {}),
-          "Content-Type": "application/json",
-        };
-  }
-  async models(): Promise<string[]> {
-    const data = await this.request("/models", { method: "GET" });
-    return (data.data ?? [])
-      .map((m: { id: string }) => m.id)
-      .filter((id: unknown) => typeof id === "string");
-  }
-  private async request(
-    path: string,
-    init: RequestInit,
-    signal?: AbortSignal,
-  ): Promise<any> {
-    const timeout = AbortSignal.timeout(120000);
+  constructor(
+    private readonly config: Pick<
+      LlmConfig,
+      "provider" | "protocol" | "baseUrl" | "apiKey"
+    >,
+  ) {}
+
+  private async request<T>(path: string, init: RequestInit): Promise<T> {
+    const headers: Record<string, string> =
+      this.config.protocol === "anthropic"
+        ? {
+            "x-api-key": this.config.apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          }
+        : {
+            ...(this.config.apiKey
+              ? { Authorization: `Bearer ${this.config.apiKey}` }
+              : {}),
+            "Content-Type": "application/json",
+          };
     const response = await fetch(
       `${this.config.baseUrl.replace(/\/$/, "")}${path}`,
       {
         ...init,
-        headers: this.headers,
+        headers,
         redirect: "error",
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        signal: AbortSignal.timeout(120000),
       },
     );
     if (!response.ok)
       throw new Error(
         `LLM provider ${this.config.provider} returned HTTP ${response.status}`,
       );
-    return response.json();
+    return (await response.json()) as T;
   }
-  async chat(input: {
-    model: string;
-    messages: ChatMessage[];
-    tools?: ChatTool[];
-    temperature?: number;
-    signal?: AbortSignal;
-  }): Promise<ChatCompletionResult> {
-    if (this.config.protocol === "anthropic") return this.anthropic(input);
-    const body: Record<string, unknown> = {
-      model: input.model,
-      messages: input.messages,
-    };
-    // OpenAI reasoning models reject the old max_tokens and custom temperature.
-    body[
-      new URL(this.config.baseUrl).hostname === "api.openai.com"
+
+  async models(): Promise<string[]> {
+    const data = await this.request<{ data?: { id: unknown }[] }>("/models", {
+      method: "GET",
+    });
+    return (data.data ?? [])
+      .map((m) => m.id)
+      .filter((id): id is string => typeof id === "string");
+  }
+
+  async test(model: string): Promise<void> {
+    const anthropic = this.config.protocol === "anthropic";
+    const tokenParameter =
+      !anthropic && new URL(this.config.baseUrl).hostname === "api.openai.com"
         ? "max_completion_tokens"
-        : "max_tokens"
-    ] = this.config.maxTokens ?? 8192;
-    if (input.temperature != null) body.temperature = input.temperature;
-    if (input.tools?.length) {
-      body.tools = input.tools;
-      body.tool_choice = "auto";
-    }
-    const data = await this.request(
-      "/chat/completions",
-      { method: "POST", body: JSON.stringify(body) },
-      input.signal,
-    );
-    const choice = data.choices?.[0];
-    if (!choice?.message) throw new Error("LLM returned empty choices");
-    return {
-      message: choice.message,
-      finishReason: choice.finish_reason ?? null,
-      usage: data.usage,
-    };
-  }
-  private async anthropic(input: {
-    model: string;
-    messages: ChatMessage[];
-    tools?: ChatTool[];
-    signal?: AbortSignal;
-  }): Promise<ChatCompletionResult> {
-    const messages: { role: string; content: any[] }[] = [];
-    for (const message of input.messages.filter((m) => m.role !== "system")) {
-      const role = message.role === "assistant" ? "assistant" : "user";
-      const content: any[] =
-        message.role === "tool"
-          ? [
-              {
-                type: "tool_result",
-                tool_use_id: message.tool_call_id,
-                content: message.content ?? "",
-              },
-            ]
-          : [
-              ...(message.content
-                ? [{ type: "text", text: message.content }]
-                : []),
-              ...(message.tool_calls ?? []).map((c) => ({
-                type: "tool_use",
-                id: c.id,
-                name: c.function.name,
-                input: JSON.parse(c.function.arguments || "{}"),
-              })),
-            ];
-      if (messages.at(-1)?.role === role)
-        messages.at(-1)!.content.push(...content);
-      else
-        messages.push({
-          role,
-          content: content.length ? content : [{ type: "text", text: " " }],
-        });
-    }
-    const body: Record<string, unknown> = {
-      model: input.model,
-      max_tokens: this.config.maxTokens ?? 8192,
-      system: input.messages
-        .filter((m) => m.role === "system")
-        .map((m) => m.content ?? "")
-        .join("\n"),
-      messages,
-    };
-    if (input.tools?.length)
-      body.tools = input.tools.map((t) => ({
-        name: t.function.name,
-        description: t.function.description,
-        input_schema: t.function.parameters,
-      }));
-    const data = await this.request(
-      "/messages",
-      { method: "POST", body: JSON.stringify(body) },
-      input.signal,
-    );
-    const blocks = data.content ?? [];
-    return {
-      message: {
-        role: "assistant",
-        content:
-          blocks
-            .filter((b: any) => b.type === "text")
-            .map((b: any) => b.text)
-            .join("\n") || null,
-        tool_calls: blocks
-          .filter((b: any) => b.type === "tool_use")
-          .map((b: any) => ({
-            id: b.id,
-            type: "function",
-            function: { name: b.name, arguments: JSON.stringify(b.input) },
-          })),
-      },
-      finishReason: data.stop_reason ?? null,
-      usage: {
-        prompt_tokens: data.usage?.input_tokens,
-        completion_tokens: data.usage?.output_tokens,
-      },
-    };
+        : "max_tokens";
+    const data = await this.request<{
+      content?: unknown[];
+      choices?: { message?: unknown }[];
+    }>(anthropic ? "/messages" : "/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "Reply with OK only." }],
+        [tokenParameter]: 32,
+      }),
+    });
+    if (
+      anthropic
+        ? !Array.isArray(data.content) || !data.content.length
+        : !data.choices?.[0]?.message
+    )
+      throw new Error("LLM returned an empty probe response");
   }
 }

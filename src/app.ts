@@ -143,21 +143,18 @@ export class App {
     this.routerLoop = new RouterLoop(
       this.store,
       this.sessions,
-      this.routerTools,
       config,
       this.paths,
     );
     this.workerLoop = new WorkerLoop(
       this.store,
       this.sessions,
-      this.workerTools,
       config.instance.max_active_tasks,
       this.paths,
     );
     this.supervisor = new Supervisor(
       this.store,
       config,
-      this.runner,
       this.sessions,
     );
     this.feishuConnection = new FeishuConnection(

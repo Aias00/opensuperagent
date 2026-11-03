@@ -144,9 +144,6 @@ async function cmdSkill(args: string[]): Promise<void> {
   store.close();
 }
 
-// Ensure seed exists relative to package root when running via tsx from src/
-mkdirSync(join(ROOT, "seed"), { recursive: true });
-
 main().catch((err) => {
   console.error(err);
   process.exit(1);

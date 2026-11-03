@@ -61,44 +61,6 @@ export class Ingress {
         control: input.control,
       });
 
-      if (decision.kind === "ignore") {
-        const trigger = this.store.triggers.insert({
-          source: input.source,
-          externalId: input.externalId,
-          threadId: input.threadId,
-          actorId: input.actorId,
-          payloadRef,
-          preview: input.preview,
-          status: "ignored",
-        });
-        return {
-          trigger,
-          duplicate: false,
-          decision,
-          inboxItemId: null,
-        };
-      }
-
-      if (decision.kind === "control") {
-        const trigger = this.store.triggers.insert({
-          source: input.source,
-          externalId: input.externalId,
-          threadId: input.threadId,
-          actorId: input.actorId,
-          payloadRef,
-          preview: input.preview,
-          status: "routed",
-        });
-        // Control path is executed by the caller (App) immediately — no inbox.
-        return {
-          trigger,
-          duplicate: false,
-          decision,
-          inboxItemId: null,
-        };
-      }
-
-      const target = decision.kind === "task" ? decision.taskId : "router";
       const trigger = this.store.triggers.insert({
         source: input.source,
         externalId: input.externalId,
@@ -108,6 +70,11 @@ export class Ingress {
         preview: input.preview,
         status: "routed",
       });
+      // Control path is executed by App immediately, without an inbox item.
+      if (decision.kind === "control")
+        return { trigger, duplicate: false, decision, inboxItemId: null };
+
+      const target = decision.kind === "task" ? decision.taskId : "router";
       const { item } = this.store.inbox.insertOrGet({
         target,
         triggerId: trigger.id,

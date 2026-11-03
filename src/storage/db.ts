@@ -55,16 +55,6 @@ export function withTransaction<T>(db: Db, fn: () => T): T {
   }
 }
 
-/** Conditional update helper — returns true if a row was updated (§11). */
-export function conditionalUpdate(
-  db: Db,
-  sql: string,
-  params: unknown[],
-): boolean {
-  const result = db.prepare(sql).run(...(params as never[]));
-  return Number(result.changes) > 0;
-}
-
 /** Cast node:sqlite `.all()` / `.get()` rows to a typed shape. */
 export function rows<T>(result: unknown): T[] {
   return result as T[];

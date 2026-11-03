@@ -23,8 +23,6 @@ export function resolveDataRoot(p: string, base = process.cwd()): string {
 
 const SourceSchema = z.object({
   source: z.string(),
-  chats: z.array(z.string()).optional(),
-  repos: z.array(z.string()).optional(),
 });
 
 const ConfigSchema = z.object({
@@ -48,7 +46,6 @@ const ConfigSchema = z.object({
     .object({
       exec_timeout_sec: z.number().int().positive().default(120),
       default_deadline_sec: z.number().int().positive().default(1800),
-      max_output_mb: z.number().positive().default(50),
     })
     .prefault({}),
   supervisor: z
@@ -56,11 +53,6 @@ const ConfigSchema = z.object({
       max_turn_duration_sec: z.number().int().positive().default(1200),
       stall_after_sec: z.number().int().positive().default(1800),
       interval_sec: z.number().int().positive().default(60),
-    })
-    .prefault({}),
-  budget: z
-    .object({
-      daily_cost_usd: z.number().nonnegative().default(50),
     })
     .prefault({}),
   console: z

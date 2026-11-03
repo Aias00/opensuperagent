@@ -2,7 +2,7 @@
 
 React / TypeScript / Vite 工作台，参考 [Shadcn Admin](https://github.com/satnaing/shadcn-admin) 的导航与工作区布局。组件采用 shadcn/ui / Radix、Tailwind CSS v4、Phosphor，执行拓扑使用 React Flow。
 
-需要 Node.js 22.12+。在仓库根目录运行：
+需要 Node.js 22.13+。在仓库根目录运行：
 
 ```sh
 npm run dev -- serve
@@ -20,7 +20,7 @@ npm run dev:web
 - 消息接入：真实外部来源状态及入站路由记录。
 - 系统设置：LLM Providers、API Key、Router / Worker 模型路由、原生适配器配置、运行信息和连接 Token。
 
-GitHub、飞书、Webhook 已实现原生收发；填写凭据和白名单后启用。飞书默认使用官方 SDK 长连接，无需公网入口；页面显示实际连接状态并支持重连。GitHub / Webhook 需要外部平台能访问对应的 `/hooks/:channel` HTTPS 回调地址。详细配置见 `docs/adapters-and-models.md`。其他通道的启用状态只表示本地配置。
+GitHub、飞书、Webhook 已实现原生收发；在系统设置中填写凭据和白名单后启用。飞书默认使用官方 SDK 长连接，无需公网入口；页面显示实际连接状态并支持重连。GitHub / Webhook 需要外部平台能访问对应的 `/hooks/:channel` HTTPS 回调地址。其他通道的启用状态只表示本地配置。
 
 ## 验证
 
@@ -33,4 +33,4 @@ npm run verify:live
 npm --prefix web run lint
 ```
 
-读模型与 API 的边界见 `docs/super-agent-architecture.md` 第 15 节。shadcn/ui 组件为 CLI 生成的本地源码；本项目自行实现领域布局，没有复制模板业务逻辑。
+shadcn/ui 组件为 CLI 生成的本地源码；本项目自行实现领域布局，没有复制模板业务逻辑。

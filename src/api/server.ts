@@ -241,21 +241,15 @@ export class ApiServer {
           protocol: provider.protocol,
           baseUrl: provider.baseUrl,
           apiKey: provider.apiKey,
-          routerModel: model,
-          workerModel: model,
-          maxTokens: path.endsWith("/test") ? 32 : provider.maxTokens,
         });
         if (path.endsWith("/models"))
           return json(res, 200, { models: await client.models() });
         if (!model) throw new HttpError(400, "Select a model to test");
         const started = Date.now();
-        const response = await client.chat({
-          model,
-          messages: [{ role: "user", content: "Reply with OK only." }],
-        });
+        await client.test(model);
         // Only connectivity and latency are returned. Provider output can echo credentials.
         return json(res, 200, {
-          ok: !!response.message,
+          ok: true,
           latencyMs: Date.now() - started,
           model,
         });

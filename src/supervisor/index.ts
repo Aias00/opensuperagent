@@ -1,6 +1,5 @@
 import type { Store } from "../storage/index.js";
 import type { AppConfig } from "../config.js";
-import type { CommandRunner } from "../execution/runner.js";
 import type { SessionManager } from "../session/manager.js";
 
 /**
@@ -13,7 +12,6 @@ export class Supervisor {
   constructor(
     private readonly store: Store,
     private readonly config: AppConfig,
-    private readonly runner: CommandRunner,
     private readonly sessions: SessionManager,
   ) {}
 
@@ -46,9 +44,6 @@ export class Supervisor {
       }
       return;
     }
-
-    // Command deadlines
-    this.runner.poll();
 
     // Turn duration
     const maxMs = this.config.supervisor.max_turn_duration_sec * 1000;

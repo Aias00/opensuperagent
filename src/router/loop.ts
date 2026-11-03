@@ -3,7 +3,6 @@ import type { DataPaths } from "../paths.js";
 import type { Store } from "../storage/index.js";
 import type { AppConfig } from "../config.js";
 import type { SessionManager } from "../session/manager.js";
-import type { RouterTools } from "./tools.js";
 import { buildRouterSystemPrompt, formatRouterBatch } from "./prompts.js";
 
 /**
@@ -17,12 +16,9 @@ export class RouterLoop {
   constructor(
     private readonly store: Store,
     private readonly sessions: SessionManager,
-    private readonly tools: RouterTools,
     private readonly config: AppConfig,
     private readonly paths?: DataPaths,
-  ) {
-    void this.tools;
-  }
+  ) {}
 
   async tick(): Promise<boolean> {
     if (this.running) return false;

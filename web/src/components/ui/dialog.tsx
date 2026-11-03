@@ -3,36 +3,20 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { XIcon } from "@phosphor-icons/react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { Button } from "@/components/ui/button";
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  useLocale();
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
-}
-function DialogTrigger({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  useLocale();
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  useLocale();
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
-function DialogClose({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  useLocale();
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 function DialogOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
-  useLocale();
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
@@ -79,7 +63,6 @@ function DialogContent({
   );
 }
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  useLocale();
   return (
     <div
       data-slot="dialog-header"
@@ -88,38 +71,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
-function DialogFooter({
-  className,
-  showCloseButton = false,
-  children,
-  ...props
-}: React.ComponentProps<"div"> & {
-  showCloseButton?: boolean;
-}) {
-  useLocale();
-  return (
-    <div
-      data-slot="dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      {showCloseButton && (
-        <DialogPrimitive.Close asChild>
-          <Button variant="outline">{tr("common.close")}</Button>
-        </DialogPrimitive.Close>
-      )}
-    </div>
-  );
-}
 function DialogTitle({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  useLocale();
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
@@ -132,7 +87,6 @@ function DialogDescription({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  useLocale();
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
@@ -143,13 +97,8 @@ function DialogDescription({
 }
 export {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
-  DialogTrigger,
 };

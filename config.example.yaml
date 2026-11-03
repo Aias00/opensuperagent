@@ -20,15 +20,11 @@ router:
 execution:
   exec_timeout_sec: 120
   default_deadline_sec: 1800
-  max_output_mb: 50
 
 supervisor:
   max_turn_duration_sec: 1200
   stall_after_sec: 1800
   interval_sec: 60
-
-budget:
-  daily_cost_usd: 50
 
 console:
   listen: 127.0.0.1:7420

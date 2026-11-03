@@ -1,5 +1,4 @@
 import type { Store } from "../storage/index.js";
-import type { Task } from "../types.js";
 
 export type RouteDecision =
   | { kind: "control"; action: "stop"; taskId: string }
@@ -21,7 +20,7 @@ export function decideRoute(
     threadId?: string | null;
     control?: { kind: "stop"; taskId: string } | null;
   },
-): RouteDecision {
+): Exclude<RouteDecision, { kind: "ignore" }> {
   if (input.control?.kind === "stop") {
     return { kind: "control", action: "stop", taskId: input.control.taskId };
   }
@@ -42,8 +41,4 @@ export function decideRoute(
   }
 
   return { kind: "router" };
-}
-
-export function assertTaskOpen(task: Task, store: Store): boolean {
-  return !store.tasks.isTerminal(task.status);
 }

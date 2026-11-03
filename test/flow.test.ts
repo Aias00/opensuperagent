@@ -1,55 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { App } from "../src/app.js";
-import type { AppConfig } from "../src/config.js";
-import { createFixtureFacadeFactory } from "./helpers/fixture-session.js";
-
-function testConfig(dataRoot: string): AppConfig {
-  return {
-    instance: { data_root: dataRoot, max_active_tasks: 2 },
-    models: { router: "router-profile" },
-    router: { instructions: "" },
-    execution: {
-      exec_timeout_sec: 120,
-      default_deadline_sec: 1800,
-      max_output_mb: 50,
-    },
-    supervisor: {
-      max_turn_duration_sec: 1200,
-      stall_after_sec: 1800,
-      interval_sec: 60,
-    },
-    budget: { daily_cost_usd: 50 },
-    console: { listen: "127.0.0.1:0" },
-    sources: [{ source: "console" }],
-    agent: { engine: "pizza" },
-  };
-}
+import { temporaryApp } from "./helpers/harness.js";
 
 describe("fixture flow", () => {
   it("console → router → worker → completed delivery", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "osa-fixture-"));
-    // Local secrets must never turn the deterministic fixture test into live LLM calls.
-    const app: App = new App(testConfig(dir), {
-      testFacadeFactory: async (options) =>
-        createFixtureFacadeFactory({
-          store: app.store,
-          routerTools: app.routerTools,
-          workerTools: app.workerTools,
-          events: app.events,
-        })(options),
-    });
+    const h = temporaryApp();
+    const { app } = h;
     try {
-      // seed coding definition via catalog
-      const { importSeed } = await import("../src/catalog/index.js");
-      const { resolve, dirname } = await import("node:path");
-      const { fileURLToPath } = await import("node:url");
-      const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-      importSeed(app.store, join(root, "seed"));
-
       await app.start();
       const submitted = app.submitConsole({
         text: "fix the flaky login test",
@@ -85,8 +44,7 @@ describe("fixture flow", () => {
       const journal = app.events.list(tasks[0]!.id);
       assert.ok(journal.some((e) => e.kind === "tool"));
     } finally {
-      await app.stop();
-      rmSync(dir, { recursive: true, force: true });
+      await h.close();
     }
   });
 });

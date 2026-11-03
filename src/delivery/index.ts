@@ -1,6 +1,5 @@
 import type { Store } from "../storage/index.js";
 import type { Delivery } from "../types.js";
-import { newId } from "../ids.js";
 import { HttpError } from "../channels/http.js";
 export interface DeliveryChannel {
   readonly name: string;
@@ -42,20 +41,6 @@ export class DeliveryService {
   }): Delivery {
     return this.store.deliveries.insert(input);
   }
-  enqueueForTrigger(input: {
-    channel: string;
-    target: string;
-    content: string;
-    originTriggerId: string;
-    seq?: number;
-  }): Delivery {
-    return this.enqueue({
-      channel: input.channel,
-      target: input.target,
-      content: input.content,
-      idempotencyKey: `${input.originTriggerId}:${input.target}:${input.seq ?? Date.now()}`,
-    });
-  }
   flushPending(): Promise<number> {
     if (this.flushing) return this.flushing;
     this.flushing = this.flush().finally(() => {
@@ -76,7 +61,9 @@ export class DeliveryService {
     for (const delivery of this.store.deliveries.listPending()) {
       if (blocked.has(`${delivery.channel}:${delivery.target}`)) continue;
       const key = `${delivery.channel}:${delivery.target}`;
-      groups.set(key, [...(groups.get(key) ?? []), delivery]);
+      const group = groups.get(key);
+      if (group) group.push(delivery);
+      else groups.set(key, [delivery]);
     }
     let sent = 0;
     const queues = [...groups.values()];
@@ -123,7 +110,4 @@ export class DeliveryService {
     );
     return sent;
   }
-}
-export function deliverySeqKey(): string {
-  return newId("seq");
 }

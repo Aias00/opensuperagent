@@ -1,6 +1,5 @@
 export {
   TaggingStore,
-  runIdempotencyKey,
   type SessionEventStoreLike,
   type EventAppendInput,
 } from "./tagging-store.js";

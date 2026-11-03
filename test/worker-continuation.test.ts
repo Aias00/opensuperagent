@@ -1,6 +1,6 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { temporaryApp, eventually } from "./helpers/harness.js";
 
 function task(
@@ -43,6 +43,60 @@ it("rejects invalid deadlines and timeouts before starting an operation", async 
       h.app.store.db.prepare("SELECT COUNT(*) AS n FROM operations").get()!.n,
       0,
     );
+  } finally {
+    await h.close();
+  }
+});
+
+it("records foreground and background launch failures without crashing or leaving the Task busy", async () => {
+  const h = temporaryApp();
+  try {
+    const id = task(h);
+    const input = { taskId: id, cwd: `${h.dir}/missing`, cmd: "printf done" };
+    const foreground = await h.app.runner.execSync(input);
+    assert.equal(foreground.operation.status, "failed");
+    assert.match(foreground.log, /ENOENT/);
+    assert.equal(h.app.runner.assertIdle(id), null);
+
+    const background = h.app.runner.startBackground(input);
+    await eventually(() => existsSync(h.app.paths.operationDir(background.id) + "/result.json"));
+    assert.deepEqual(h.app.runner.poll(), [background.id]);
+    const finished = h.app.store.operations.get(background.id)!;
+    assert.equal(finished.status, "failed");
+    assert.match(readFileSync(finished.logPath!, "utf8"), /ENOENT/);
+    assert.equal(h.app.runner.assertIdle(id), null);
+  } finally {
+    await h.close();
+  }
+});
+
+it("wakes the Worker exactly once when supervision runs before a background completion is pumped", async () => {
+  const prompts: string[] = [];
+  const h = temporaryApp((factory) => async (input) => ({
+    ...(await factory(input)),
+    async prompt(text: string) {
+      if (input.session.owner !== "router") prompts.push(text);
+    },
+  }));
+  try {
+    const id = task(h);
+    await h.app.workerLoop.tick(id);
+    prompts.length = 0;
+    const op = h.app.runner.startBackground({
+      taskId: id,
+      cwd: h.app.store.tasks.get(id)!.workspacePath,
+      cmd: "printf done",
+    });
+    await eventually(() => existsSync(h.app.paths.operationDir(op.id) + "/result.json"));
+
+    await h.app.supervisor.check();
+    await h.app.pump();
+    await h.app.pump();
+
+    assert.equal(h.app.store.operations.get(op.id)!.status, "succeeded");
+    assert.equal(prompts.length, 1);
+    assert.ok(prompts[0]!.includes(`Operation ${op.id} succeeded`));
+    assert.equal(h.app.store.inbox.listPending(id).length, 0);
   } finally {
     await h.close();
   }

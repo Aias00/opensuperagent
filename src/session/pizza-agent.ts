@@ -32,15 +32,12 @@ type EventQuery = {
 
 /** Duck-typed surface of pizza's SqliteEventStore (not exported at package root). */
 type EventStoreLike = {
-  append?(e: EventAppendInput): unknown;
+  append(e: EventAppendInput): unknown;
   appendBatch?(e: EventAppendInput[]): unknown;
   query?(
     filter: EventQuery,
   ): { payload?: unknown; idempotency_key?: string; sequence: number }[];
-  subscribe?(h: (e: { type: string }) => void, o?: unknown): () => void;
   flush?(): Promise<void>;
-  close?(): void;
-  closeAsync?(): Promise<void>;
   head_sequence?: number;
   [key: string]: unknown;
 };
@@ -273,17 +270,11 @@ export function createPizzaFacadeFactory(deps: {
     // carries idempotency_key = run:<runId>. SqliteEventStore is not exported
     // by the package, so the proxy is applied onto the live instance.
     const tagging = new TaggingStore({
-      append: eventStore.append?.bind(eventStore),
+      append: eventStore.append.bind(eventStore),
       appendBatch: eventStore.appendBatch?.bind(eventStore),
-      flush: eventStore.flush?.bind(eventStore),
-      closeAsync: eventStore.closeAsync?.bind(eventStore),
-      close: eventStore.close?.bind(eventStore),
-      query: eventStore.query?.bind(eventStore),
-      subscribe: eventStore.subscribe?.bind(eventStore),
-    } as never);
+    });
     try {
-      if (typeof eventStore.append === "function")
-        eventStore.append = (e: EventAppendInput) => tagging.append(e);
+      eventStore.append = (e: EventAppendInput) => tagging.append(e);
       if (typeof eventStore.appendBatch === "function")
         eventStore.appendBatch = (es: EventAppendInput[]) =>
           tagging.appendBatch(es);
