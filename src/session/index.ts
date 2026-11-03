@@ -12,3 +12,4 @@ export {
 } from "./manager.js";
 export { createMvpFacadeFactory } from "./mvp-agent.js";
 export { createLlmFacadeFactory } from "./llm-agent.js";
+export { createPizzaFacadeFactory } from "./pizza-agent.js";

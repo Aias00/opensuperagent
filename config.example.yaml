@@ -36,3 +36,8 @@ console:
 
 sources:
   - source: console
+
+agent:
+  # auto: Pizza event-sourced engine when @tomsun28/pizza is installed,
+  # falling back to the builtin loop; "pizza" requires it; "builtin" never uses it.
+  engine: auto

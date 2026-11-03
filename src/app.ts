@@ -9,6 +9,7 @@ import { ConsoleChannelIngress } from "./channels/index.js";
 import { WorkspaceManager, CommandRunner } from "./execution/index.js";
 import { SessionManager, type FacadeFactory } from "./session/index.js";
 import { createLlmFacadeFactory } from "./session/llm-agent.js";
+import { createPizzaFacadeFactory } from "./session/pizza-agent.js";
 import { RouterTools, RouterLoop } from "./router/index.js";
 import { WorkerTools, WorkerLoop } from "./worker/index.js";
 import { Supervisor } from "./supervisor/index.js";
@@ -41,6 +42,10 @@ export class App {
   readonly adapters: Adapters;
   readonly feishuConnection: FeishuConnection;
   private readonly customFacade: boolean;
+  usedEngine: "builtin" | "pizza" = "builtin";
+  get engineMode(): "mvp" | "builtin" | "pizza" {
+    return this.customFacade ? "mvp" : this.usedEngine;
+  }
   get agentMode(): "llm" | "mvp" | "unconfigured" {
     return this.customFacade
       ? "mvp"
@@ -132,21 +137,47 @@ export class App {
           ),
         ),
     });
+    const requireConfig: FacadeFactory = async (input) => {
+      const handle = await llmFactory(input);
+      return {
+        session: input.session,
+        tagging: null,
+        prompt: async (text) => {
+          if (!this.settings.ready) throw new Error("LLM is not configured");
+          await handle.prompt(text);
+        },
+        abort: (reason) => handle.abort(reason),
+        close: () => handle.close(),
+      };
+    };
+    const pizzaFactory = createPizzaFacadeFactory({
+      ...deps,
+      paths: this.paths,
+      resolveModel: (owner, profile) => this.settings.resolve(owner, profile),
+    });
+    let pizzaBroken = false;
     const facadeFactory: FacadeFactory =
       opts?.facadeFactory ??
-      (async (input) => {
-        const llm = await llmFactory(input);
-        return {
-          session: input.session,
-          tagging: null,
-          prompt: async (text) => {
-            if (!this.settings.ready) throw new Error("LLM is not configured");
-            await llm.prompt(text);
-          },
-          abort: (reason) => llm.abort(reason),
-          close: () => llm.close(),
-        };
-      });
+      (config.agent.engine === "builtin"
+        ? requireConfig
+        : async (input) => {
+            if (!pizzaBroken) {
+              try {
+                const handle = await pizzaFactory(input);
+                this.usedEngine = "pizza";
+                return handle;
+              } catch (err) {
+                if (config.agent.engine === "pizza") throw err;
+                pizzaBroken = true;
+                console.error(
+                  "[app] pizza engine unavailable; builtin loop active:",
+                  err,
+                );
+              }
+            }
+            this.usedEngine = "builtin";
+            return requireConfig(input);
+          });
 
     this.sessions = new SessionManager(this.store, this.paths, facadeFactory);
     this.routerLoop = new RouterLoop(

@@ -33,12 +33,12 @@ const ConfigSchema = z.object({
       data_root: z.string().default(DEFAULT_DATA_ROOT),
       max_active_tasks: z.number().int().positive().default(2),
     })
-    .default({}),
+    .prefault({}),
   models: z
     .object({
       router: z.string().default("router-profile"),
     })
-    .default({}),
+    .prefault({}),
   router: z
     .object({
       instructions: z.string().default(""),
@@ -50,26 +50,32 @@ const ConfigSchema = z.object({
       default_deadline_sec: z.number().int().positive().default(1800),
       max_output_mb: z.number().positive().default(50),
     })
-    .default({}),
+    .prefault({}),
   supervisor: z
     .object({
       max_turn_duration_sec: z.number().int().positive().default(1200),
       stall_after_sec: z.number().int().positive().default(1800),
       interval_sec: z.number().int().positive().default(60),
     })
-    .default({}),
+    .prefault({}),
   budget: z
     .object({
       daily_cost_usd: z.number().nonnegative().default(50),
     })
-    .default({}),
+    .prefault({}),
   console: z
     .object({
       listen: z.string().default("127.0.0.1:7420"),
       admin_token: z.string().optional(),
     })
-    .default({}),
+    .prefault({}),
   sources: z.array(SourceSchema).default([{ source: "console" }]),
+  agent: z
+    .object({
+      // "auto" uses Pizza when installed, falling back to the builtin loop.
+      engine: z.enum(["auto", "pizza", "builtin"]).default("auto"),
+    })
+    .prefault({}),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

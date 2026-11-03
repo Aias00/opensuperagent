@@ -52,7 +52,7 @@ const selection = z.object({
 export const RoutingSchema = z.object({
   router: selection.nullable(),
   worker: selection.nullable(),
-  profiles: z.record(selection).default({}),
+  profiles: z.record(z.string(), selection).default({}),
 });
 export type ModelRouting = z.infer<typeof RoutingSchema>;
 const GithubSchema = z.object({
@@ -85,9 +85,9 @@ const WebhookSchema = z.object({
   actors: names.default([]),
 });
 export const AdaptersSchema = z.object({
-  github: GithubSchema.default({}),
-  feishu: FeishuSchema.default({}),
-  webhook: WebhookSchema.default({}),
+  github: GithubSchema.prefault({}),
+  feishu: FeishuSchema.prefault({}),
+  webhook: WebhookSchema.prefault({}),
 });
 export type AdaptersConfig = z.infer<typeof AdaptersSchema>;
 const Schema = z.object({
@@ -95,7 +95,7 @@ const Schema = z.object({
   revision: z.number().int().default(0),
   providers: z.array(ProviderSchema).default([]),
   routing: RoutingSchema.default({ router: null, worker: null, profiles: {} }),
-  adapters: AdaptersSchema.default({}),
+  adapters: AdaptersSchema.prefault({}),
 });
 type Settings = z.infer<typeof Schema>;
 const secretFields = {

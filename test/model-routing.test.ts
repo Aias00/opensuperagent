@@ -86,6 +86,7 @@ it("hot-swaps the next Worker model while a slow existing Worker keeps its model
   const config = loadConfig(resolve("config.example.yaml"));
   config.instance.data_root = dir;
   config.console.listen = "127.0.0.1:0";
+  config.agent.engine = "builtin";
   const app = new App(config, { legacyLlm: null });
   importSeed(app.store, resolve("seed"));
   const api = new ApiServer(app);

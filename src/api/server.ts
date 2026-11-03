@@ -463,6 +463,7 @@ export class ApiServer {
           definitions: this.app.store.catalog.listActiveDefinitions().length,
           skills: this.app.store.catalog.listSkills().length,
           agent: this.app.agentMode,
+          engine: this.app.engineMode,
         });
       }
 
