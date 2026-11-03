@@ -4,7 +4,7 @@
 
 [English](README.en.md) | [简体中文](README.md)
 
-受 DeepSeek Harness 团队[《Super-agent 设计探索：迈向更自主的 Agent 系统》](https://mp.weixin.qq.com/s/zoS7GlReWPhfCjENGxXCdg)的启发，结合此前在 Z.ai 做 Agent 的理解，肝了 OpenSuperAgent：一个可自部署的 Super-agent 开源落地实现。
+受 DeepSeek Harness 团队[《Super-agent 设计探索：迈向更自主的 Agent 系统》](https://mp.weixin.qq.com/s/zoS7GlReWPhfCjENGxXCdg)的启发，肝了 OpenSuperAgent：一个可自部署的 Super-agent 开源落地实现。
 
 希望它能接住日常工作里的消息，记住任务的来龙去脉，并行把事情往前推。你提出需求、补充方向，在需要时查看进展、验收结果。
 

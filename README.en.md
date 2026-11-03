@@ -4,7 +4,7 @@
 
 [English](README.en.md) | [简体中文](README.md)
 
-Inspired by the DeepSeek Harness team's [Super-agent Design Exploration: Toward More Autonomous Agent Systems](https://mp.weixin.qq.com/s/zoS7GlReWPhfCjENGxXCdg), and drawing on what I learned building agents at Z.ai, I build OpenSuperAgent: a self-hosted, open-source implementation of the Super-agent concept.
+Inspired by the DeepSeek Harness team's [Super-agent Design Exploration: Toward More Autonomous Agent Systems](https://mp.weixin.qq.com/s/zoS7GlReWPhfCjENGxXCdg), I build OpenSuperAgent: a self-hosted, open-source implementation of the Super-agent concept.
 
 The goal: an agent that picks up messages from your workflow, keeps track of each task, and moves multiple jobs forward. Give it a goal, add direction along the way, and check in to review progress and results.
 
