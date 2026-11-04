@@ -42,6 +42,8 @@ opensuperagent skill import ./my-skill
 
 默认配置与运行数据保存在 `~/.opensuperagent`，可通过 `--config <路径>` 指定配置文件。
 
+所有 CLI 命令（包括 `init`）按以下优先级选择配置：`--config <路径>` > `OPENSUPERAGENT_CONFIG` > 当前目录的 `config.yaml` > `~/.opensuperagent/config.yaml`。显式指定的配置文件不存在，或 `--config` 缺少路径时，命令会报错退出；只有未指定且未发现配置时，`init` 才创建默认配置。
+
 ## 本地开发
 
 ```sh

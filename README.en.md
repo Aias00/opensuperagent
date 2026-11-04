@@ -39,6 +39,8 @@ opensuperagent skill import ./my-skill
 
 Configuration and runtime data live in `~/.opensuperagent` by default. Select another configuration file with `--config <path>`.
 
+All CLI commands, including `init`, select configuration in this order: `--config <path>` > `OPENSUPERAGENT_CONFIG` > `./config.yaml` > `~/.opensuperagent/config.yaml`. A missing explicitly selected file or a missing `--config` value causes an error. `init` creates the default config only when no config was selected or discovered.
+
 ## Develop locally
 
 ```sh

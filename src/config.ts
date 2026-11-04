@@ -79,10 +79,21 @@ const ConfigSchema = z.object({
 export type AppConfig = z.infer<typeof ConfigSchema>;
 
 /**
- * Config file discovery: explicit path/env wins, then ./config.yaml
+ * Config file discovery: explicit path, then env, then ./config.yaml
  * (project-local), then <defaultConfigDir>/config.yaml, else built-in defaults.
+ * An explicit or env-selected path must exist; never fall back from it.
  */
-export function discoverConfigPath(): string | undefined {
+export function discoverConfigPath(configPath?: string): string | undefined {
+  const explicit = configPath ?? process.env.OPENSUPERAGENT_CONFIG;
+  if (explicit !== undefined) {
+    if (!existsSync(explicit)) {
+      throw new Error(
+        `Config not found: ${explicit}. Copy config.example.yaml to config.yaml.`,
+      );
+    }
+    return explicit;
+  }
+
   const local = resolve(process.cwd(), "config.yaml");
   if (existsSync(local)) return local;
   const global = join(defaultConfigDir(), "config.yaml");
@@ -91,15 +102,7 @@ export function discoverConfigPath(): string | undefined {
 }
 
 export function loadConfig(configPath?: string): AppConfig {
-  const explicit = configPath ?? process.env.OPENSUPERAGENT_CONFIG;
-  let path = explicit ?? discoverConfigPath();
-
-  if (explicit && !existsSync(explicit)) {
-    throw new Error(
-      `Config not found: ${explicit}. Copy config.example.yaml to config.yaml.`,
-    );
-  }
-
+  const path = discoverConfigPath(configPath);
   const raw = path ? parseYaml(readFileSync(path, "utf8")) : undefined;
   const parsed = ConfigSchema.parse(raw ?? {});
 

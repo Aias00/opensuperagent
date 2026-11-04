@@ -2,7 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, defaultConfigDir } from "./config.js";
+import { loadConfig, discoverConfigPath, defaultConfigDir } from "./config.js";
 import { DataPaths } from "./paths.js";
 import { Store } from "./storage/index.js";
 import { importSeed, importDefinitionFile, importSkillDir } from "./catalog/index.js";
@@ -54,23 +54,21 @@ Commands:
 
 function configPathFromArgs(args: string[]): string | undefined {
   const i = args.indexOf("--config");
-  if (i >= 0) return args[i + 1];
-  return undefined;
+  if (i < 0) return undefined;
+  const path = args[i + 1];
+  if (!path || path.startsWith("-")) {
+    throw new Error("--config requires a file path");
+  }
+  return path;
 }
 
 async function cmdInit(args: string[]): Promise<void> {
-  let configPath = configPathFromArgs(args);
-  if (!configPath) {
-    const local = resolve(process.cwd(), "config.yaml");
-    const global = join(defaultConfigDir(), "config.yaml");
-    // Project-local config wins; otherwise seed a user-level config so the
-    // data root and its config live together under ~/.opensuperagent.
-    configPath = existsSync(local) ? local : global;
-    if (!existsSync(configPath)) {
-      mkdirSync(dirname(configPath), { recursive: true });
-      copyFileSync(join(ROOT, "config.example.yaml"), configPath);
-      console.log(`Wrote ${configPath}`);
-    }
+  const configPath =
+    discoverConfigPath(configPathFromArgs(args)) ?? join(defaultConfigDir(), "config.yaml");
+  if (!existsSync(configPath)) {
+    mkdirSync(dirname(configPath), { recursive: true });
+    copyFileSync(join(ROOT, "config.example.yaml"), configPath);
+    console.log(`Wrote ${configPath}`);
   }
 
   const config = loadConfig(configPath);
