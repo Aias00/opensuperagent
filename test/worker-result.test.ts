@@ -1,6 +1,7 @@
 import { it } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { pizzaHarness, submitResultCall } from "./helpers/pizza.js";
 
 it("continues a text-only Worker turn and completes through a later result submission", async () => {
@@ -170,6 +171,81 @@ it("recovers legacy waiting tasks that never submitted a result without duplicat
     await h.app.workerLoop.tick(id);
     assert.equal(h.app.store.tasks.get(id)!.status, "completed");
     assert.equal(h.requests.length, 1);
+  } finally {
+    await h.close();
+  }
+});
+
+it("does not retry or fail an observer that omitted submit_result", async () => {
+  const h = await pizzaHarness(() => ({ text: "unused" }));
+  try {
+    const def = h.app.store.catalog.getDefinition("coding")!;
+    const threadId = "thread-result-roles";
+    const finishWithoutResult = (name: string, role: "executor" | "observer") => {
+      const task = h.app.store.tasks.insert({
+        ownerId: "owner",
+        objective: name,
+        definition: def,
+        originTriggerId: "fixture",
+        workspacePath: join(h.dir, name),
+        status: "pending",
+      });
+      h.app.store.tasks.addSubscription(task.id, threadId, role);
+      const trigger = h.app.store.triggers.insert({
+        source: "console",
+        externalId: `${name}-input`,
+        threadId,
+        actorId: "owner",
+        payloadRef: `mem:${name}`,
+        preview: `${name} input`,
+        status: "routed",
+      });
+      h.app.store.inbox.insertOrGet({
+        target: task.id,
+        triggerId: trigger.id,
+      });
+      const batch = h.app.sessions.beginRun(task.id, () => `${name} input`)!;
+      h.app.store.runs.transition(batch.run.id, "pending", "submitted");
+      h.app.store.runs.transition(batch.run.id, "submitted", "completed");
+      h.app.store.inbox.markDone(batch.items.map((item) => item.id));
+      h.app.store.tasks.transition(task.id, "pending", "waiting");
+      return { taskId: task.id, runId: batch.run.id };
+    };
+
+    const executor = finishWithoutResult("executor", "executor");
+    const observer = finishWithoutResult("observer", "observer");
+
+    assert.equal(await h.app.workerLoop.tick(observer.taskId), false);
+    assert.equal(h.app.store.tasks.get(observer.taskId)!.status, "waiting");
+    assert.equal(h.app.store.tasks.get(observer.taskId)!.result, null);
+    assert.equal(h.app.store.inbox.listPending(observer.taskId).length, 0);
+    assert.equal(
+      h.app.events
+        .list(observer.taskId)
+        .some(
+          (event) =>
+            event.kind === "continuation" || event.kind === "error",
+        ),
+      false,
+    );
+
+    const followUps = () =>
+      h.app.store.db
+        .prepare(
+          "SELECT external_id FROM triggers WHERE source = 'system' AND external_id LIKE 'worker-result:%'",
+        )
+        .all() as { external_id: string }[];
+    assert.deepEqual(followUps(), []);
+
+    assert.equal(await h.app.workerLoop.tick(executor.taskId), true);
+    assert.equal(h.app.store.tasks.get(executor.taskId)!.status, "active");
+    assert.equal(h.app.store.inbox.listPending(executor.taskId).length, 1);
+    assert.deepEqual(
+      followUps().map((row) => row.external_id),
+      [`worker-result:${executor.runId}:1`],
+    );
+    assert.equal(h.app.store.tasks.get(observer.taskId)!.status, "waiting");
+    assert.equal(h.requests.length, 0);
   } finally {
     await h.close();
   }
